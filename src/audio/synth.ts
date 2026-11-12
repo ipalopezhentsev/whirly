@@ -1,6 +1,7 @@
 // Base-sound generators. Each preset renders offline into a normalized mono AudioBuffer.
 import { fromData, normalize, loopCrossfade, edgeFade } from './buffers';
 import { TAU } from './util';
+import { renderSpeech, type SpeechParams } from './speech';
 
 /** Random source for the generators. `renderPreset` swaps in a seeded one so a render can be repeated exactly. */
 let random = Math.random;
@@ -210,6 +211,8 @@ export interface Preset {
   loop?: boolean;
   render?: (ctx: BaseAudioContext, out: AudioNode, dur: number, params: CustomParams) => void;
   js?: (sr: number, dur: number, len: number) => Float32Array;
+  /** Speaks text instead, when the recipe has some. */
+  speech?: boolean;
 }
 
 export const PRESETS: Record<string, Preset> = {
@@ -345,7 +348,7 @@ export const PRESETS: Record<string, Preset> = {
     },
   },
   voice: {
-    label: 'Synthetic voice (babble)', dur: 8,
+    label: 'Synthetic voice (text or babble)', dur: 8, speech: true,
     render(ctx, out, dur) {
       const V: Record<string, number[]> = {
         a: [730, 1090, 2440], e: [530, 1840, 2480], i: [270, 2290, 3010], o: [570, 840, 2410], u: [300, 870, 2240],
@@ -468,6 +471,7 @@ export const PRESETS: Record<string, Preset> = {
  */
 export async function renderPreset(
   key: string, dur: number, sampleRate: number, params: CustomParams = customDefaults(), seed?: number,
+  speech?: SpeechParams,
 ) {
   const p = PRESETS[key];
   if (!p) throw new Error(`Unknown preset “${key}”`);
@@ -479,7 +483,9 @@ export async function renderPreset(
   const prev = random;
   if (seed !== undefined) random = seeded(seed);
   try {
-    if (p.js) {
+    if (p.speech && speech?.text.trim()) {
+      data = renderSpeech(speech, sampleRate, len, random);
+    } else if (p.js) {
       data = p.js(sampleRate, dur, len);
     } else {
       ctx = new OfflineAudioContext(1, len, sampleRate);

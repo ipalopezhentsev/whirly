@@ -195,23 +195,30 @@ details[open] { display: grid; gap: 7px; }
 .drop.over, .drop:hover { border-color: var(--accent); color: var(--text); }
 .drop small { font-size: 11px; }
 .custom { display: grid; gap: 7px; padding: 8px 0; border-top: 1px solid var(--line); }
+.speech-text {
+  width: 100%; resize: vertical; min-height: 54px; font: inherit; color: inherit; line-height: 1.4;
+  background: var(--bg); border: 1px solid var(--line-2); border-radius: 5px; padding: 5px 7px;
+}
+.speech-text:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .recbar { display: flex; align-items: center; gap: 8px; }
 .lvl { flex: 1; height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
 .lvl > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--warn), var(--danger)); transition: width 0.05s; }
 
+.synth-settings { display: grid; gap: 7px; padding: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.gen-btns { display: grid; grid-template-columns: 1fr 1.3fr; gap: 6px; }
+.gen-btns button { padding: 8px; }
+.list-head { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.list-head span { flex: 1; }
 .sound-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.sound-list li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 6px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.sound-list li:hover { background: var(--card); }
-.sound-list li.on { background: var(--card); border-color: var(--line-2); }
+.sound-list li { border: 1px solid transparent; border-radius: 6px; }
+.sound-list li .row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; cursor: pointer; }
+.sound-list li .row:hover { background: var(--card); }
+.sound-list li.on .row { background: var(--card); }
+.sound-list li.open { border-color: var(--line-2); background: var(--panel); }
+.sound-list li.on.open { border-color: var(--accent); }
+.sound-list .caret { width: 10px; color: var(--muted); font-size: 11px; }
+.sound-list li .editor { margin: 0 4px 4px; }
 .sound-list .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sound-list .meta { color: var(--muted); font-family: var(--mono); font-size: 11px; }
 

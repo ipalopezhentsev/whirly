@@ -1,4 +1,5 @@
 import type { CustomParams } from '../audio/synth';
+import type { SpeechParams } from '../audio/speech';
 
 export interface Vec3 {
   x: number;
@@ -90,6 +91,8 @@ export interface SynthRecipe {
   seed: number;
   /** Custom-synth settings (only for the 'custom' preset). */
   params?: CustomParams;
+  /** Text and voice settings (only for the 'voice' preset when it speaks text). */
+  speech?: SpeechParams;
   edits: EditOp[];
 }
 

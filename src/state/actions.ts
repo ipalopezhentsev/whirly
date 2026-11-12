@@ -2,7 +2,7 @@
 import { store } from './store';
 import { audioCtx } from '../audio/context';
 import { applyEdit, toMono } from '../audio/buffers';
-import { newSeed, renderPreset } from '../audio/synth';
+import { newSeed, PRESETS, renderPreset } from '../audio/synth';
 import { ENVIRONMENTS } from '../audio/reverb';
 import { DEG, uid } from '../audio/util';
 import { defaultScene, newSource } from '../scene/scene';
@@ -117,7 +117,7 @@ export function removeSource(id: string) {
 // ---------------------------------------------------------------- sounds
 
 /** Earlier versions of a sound, for undo. */
-const undoStacks = new Map<string, Pick<Sound, 'buffer' | 'recipe'>[]>();
+const undoStacks = new Map<string, (Pick<Sound, 'buffer' | 'recipe'> & { name?: string })[]>();
 
 function uniqueName(name: string) {
   const names = new Set(store.get().sounds.map((s) => s.name));
@@ -133,16 +133,39 @@ export function addSound(name: string, buffer: AudioBuffer, recipe?: SynthRecipe
 
 /** Render a synth recipe, edits included. */
 export async function renderRecipe(r: SynthRecipe, sampleRate = audioCtx().sampleRate) {
-  let buf = await renderPreset(r.preset, r.dur, sampleRate, r.params, r.seed);
+  let buf = await renderPreset(r.preset, r.dur, sampleRate, r.params, r.seed, r.speech);
   for (const e of r.edits) buf = await applyEdit(buf, e);
   return buf;
 }
 
-/** Synthesize a new sound (with a fresh random seed unless one is given) and add it to the library. */
-export async function synthSound(name: string, recipe: Omit<SynthRecipe, 'seed' | 'edits'> & Partial<SynthRecipe>) {
+/** A complete synth recipe: a fresh random seed unless one is given, and only the settings its preset uses. */
+export function makeRecipe(recipe: Omit<SynthRecipe, 'seed' | 'edits'> & Partial<SynthRecipe>): SynthRecipe {
   const r: SynthRecipe = { seed: newSeed(), edits: [], ...recipe };
   if (r.preset !== 'custom') delete r.params;
+  if (!PRESETS[r.preset]?.speech || !r.speech?.text.trim()) delete r.speech;
+  return r;
+}
+
+/** Synthesize a new sound and add it to the library. */
+export async function synthSound(name: string, recipe: Omit<SynthRecipe, 'seed' | 'edits'> & Partial<SynthRecipe>) {
+  const r = makeRecipe(recipe);
   return addSound(name, await renderRecipe(r), r);
+}
+
+/**
+ * Swap a sound's audio for a new render (undoable). It keeps its id, so scene sources using it
+ * play the new audio.
+ */
+export function replaceSound(id: string, buffer: AudioBuffer, recipe: SynthRecipe | undefined, name?: string) {
+  const sound = getSound(id);
+  if (!sound) return;
+  const stack = undoStacks.get(id) ?? [];
+  stack.push({ buffer: sound.buffer, recipe: sound.recipe, name: sound.name });
+  if (stack.length > 20) stack.shift();
+  undoStacks.set(id, stack);
+  store.set((s) => ({
+    sounds: s.sounds.map((x) => (x.id === id ? { ...x, buffer: toMono(buffer), recipe, name: name ?? x.name, version: x.version + 1 } : x)),
+  }));
 }
 
 export function selectSound(id: string | null) {
@@ -176,12 +199,21 @@ export function undoSound(id: string) {
 }
 
 export function deleteSound(id: string) {
-  undoStacks.delete(id);
-  store.set((s) => ({
-    sounds: s.sounds.filter((x) => x.id !== id),
-    selectedSoundId: s.selectedSoundId === id ? (s.sounds.find((x) => x.id !== id)?.id ?? null) : s.selectedSoundId,
-    scene: { ...s.scene, sources: s.scene.sources.map((src) => (src.soundId === id ? { ...src, soundId: null } : src)) },
-  }));
+  deleteSounds([id]);
+}
+
+/** Remove sounds from the library; scene sources that used them are left without a sound. */
+export function deleteSounds(ids: string[]) {
+  const gone = new Set(ids);
+  for (const id of ids) undoStacks.delete(id);
+  store.set((s) => {
+    const sounds = s.sounds.filter((x) => !gone.has(x.id));
+    return {
+      sounds,
+      selectedSoundId: s.selectedSoundId && gone.has(s.selectedSoundId) ? (sounds[0]?.id ?? null) : s.selectedSoundId,
+      scene: { ...s.scene, sources: s.scene.sources.map((src) => (src.soundId && gone.has(src.soundId) ? { ...src, soundId: null } : src)) },
+    };
+  });
 }
 
 // ---------------------------------------------------------------- demo
