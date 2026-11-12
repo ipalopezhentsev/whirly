@@ -9,7 +9,7 @@
 // then pushed into AudioParams: smoothed per animation frame in realtime, or as dense linear ramps offline.
 import { motionGain, positionAt, velocityAt } from '../scene/motion';
 import { firstCue, nextCue, playLength, type Cue } from '../scene/playback';
-import type { Physics, Scene, Source, Vec3 } from '../scene/types';
+import type { Physics, Scene, Sound, Source, Vec3 } from '../scene/types';
 import { getImpulse } from './reverb';
 import { clamp, dbToGain, DEG } from './util';
 
@@ -353,12 +353,39 @@ export function setListener(ctx: BaseAudioContext, yawDeg: number, time: number,
 
 // ---------------------------------------------------------------- offline render
 
+/** Sources fade out over this long when an export stops them, so a cut-off loop doesn't click. */
+const STOP_FADE = 0.05;
+/** The ring-out ends once the mix stays below this level (−80 dBFS). */
+const SILENCE = 1e-4;
+
 /**
  * Render the scene to a stereo buffer, faster than realtime. Motion is written as
  * 200 Hz linear automation, so Doppler and panning are sample-accurate between points.
+ *
+ * Sources sound for `duration` seconds, then stop. Composed songs play once, never looped, so a
+ * song set to loop doesn't start over. With `ringOut`, the recording then carries on until the
+ * room's reverb and any sound still on its way to the listener have died away (the silence after
+ * is trimmed); without it, it ends at `duration`. `onProgress` gets the fraction rendered, 0 … 1.
  */
-export async function renderScene(scene: Scene, getBuffer: (id: string | null) => AudioBuffer | undefined, duration: number, sampleRate: number) {
-  const length = Math.max(1, Math.ceil(duration * sampleRate));
+export async function renderScene(
+  scene: Scene, getSound: (id: string | null) => Sound | undefined, duration: number, sampleRate: number,
+  { ringOut = true, onProgress }: { ringOut?: boolean; onProgress?: (f: number) => void } = {},
+) {
+  const solo = anySolo(scene);
+  const audible = scene.sources.filter((src) => getSound(src.soundId) && !src.muted && (!solo || src.solo));
+
+  // Longest the mix can keep sounding after the sources stop: sound in flight, then the reverb.
+  let tail = 0;
+  if (ringOut) {
+    for (const src of audible) {
+      const st = computeState(src, scene, duration, solo);
+      tail = Math.max(tail, st.delay, st.refl.delay);
+    }
+    const ir = scene.environment.wet > 0 ? getImpulse(sampleRate, scene.environment.preset) : null;
+    tail += (ir?.duration ?? 0) + STOP_FADE + 0.3;
+  }
+
+  const length = Math.max(1, Math.ceil((duration + tail) * sampleRate));
   const ctx = new OfflineAudioContext({ numberOfChannels: 2, length, sampleRate });
   const out = buildOutput(ctx, scene, ctx.destination);
   const steps = Math.ceil(duration * 200);
@@ -370,17 +397,82 @@ export async function renderScene(scene: Scene, getBuffer: (id: string | null) =
     setListener(ctx, scene.listener.yaw, 0, 'set');
   }
 
-  const solo = anySolo(scene);
-  for (const src of scene.sources) {
-    const buffer = getBuffer(src.soundId);
-    if (!buffer || src.muted || (solo && !src.solo)) continue;
+  for (const src of audible) {
+    const sound = getSound(src.soundId)!;
+    const buffer = sound.buffer;
+    const song = !!sound.recipe?.music;
     const ch = createChain(ctx, src, buffer, out, scene.physics);
-    for (let k = 0; k <= steps; k++) applyState(ch, computeState(src, scene, k * dt, solo), k * dt, k ? 'ramp' : 'set');
+    for (let k = 0; k <= steps; k++) {
+      const t = k * dt;
+      const st = computeState(src, scene, t, solo);
+      // Stop: fade what the source emits. Sound already in flight (delay lines, reverb) rings on.
+      const fade = Math.min(1, (duration - t) / STOP_FADE);
+      applyState(ch, fade < 1 ? { ...st, gain: st.gain * fade } : st, t, k ? 'ramp' : 'set');
+    }
     if (src.playback === 'random') {
-      for (let c = firstCue(src); c.t < duration; c = nextCue(src, c, buffer.duration)) startCue(ctx, ch, c, c.t);
+      for (let c = firstCue(src); c.t < duration; c = nextCue(src, c, buffer.duration)) {
+        startCue(ctx, ch, c, c.t);
+        if (song) break;
+      }
     } else {
-      startPlayer(ctx, ch, src.startDelay, { loop: src.playback === 'loop' });
+      startPlayer(ctx, ch, src.startDelay, { loop: src.playback === 'loop' && !song });
     }
   }
-  return ctx.startRendering();
+  if (onProgress) {
+    // Pause the render now and then to report how far it got (at most ~100 times, at least 0.5 s apart).
+    const total = length / sampleRate;
+    const step = Math.max(0.5, total / 100);
+    for (let t = step; t < total - 0.1; t += step) {
+      const at = t;
+      ctx.suspend(at).then(() => {
+        onProgress(at / total);
+        ctx.resume();
+      }, () => {});
+    }
+  }
+  const rendered = await ctx.startRendering();
+  return ringOut ? trimSilence(rendered, Math.ceil(duration * sampleRate)) : rendered;
+}
+
+/** Cut the silence after the ring-out (never before `from`), with a short fade to end cleanly. */
+function trimSilence(buf: AudioBuffer, from: number) {
+  const chans = Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c));
+  let last = from;
+  for (const d of chans) {
+    for (let i = d.length - 1; i > last; i--) {
+      if (Math.abs(d[i]) > SILENCE) {
+        last = i;
+        break;
+      }
+    }
+  }
+  const sr = buf.sampleRate;
+  const length = Math.min(buf.length, last + Math.round(0.05 * sr));
+  const out = new AudioBuffer({ numberOfChannels: chans.length, length, sampleRate: sr });
+  const fadeLen = Math.min(length - from, Math.round(0.02 * sr));
+  chans.forEach((d, c) => {
+    const o = d.slice(0, length);
+    for (let i = 0; i < fadeLen; i++) o[length - 1 - i] *= i / fadeLen;
+    out.copyToChannel(o, c);
+  });
+  return out;
+}
+
+/**
+ * When the last composed song in the scene finishes its first full play (scene seconds), and which
+ * source plays it; null if no audible source plays a composition. An export shorter than this would
+ * cut a song off.
+ */
+export function songsEnd(scene: Scene, getSound: (id: string | null) => Sound | undefined) {
+  const solo = anySolo(scene);
+  let best: { end: number; source: Source } | null = null;
+  for (const src of scene.sources) {
+    const sound = getSound(src.soundId);
+    if (!sound?.recipe?.music || src.muted || (solo && !src.solo)) continue;
+    const dur = sound.buffer.duration;
+    const c = src.playback === 'random' ? firstCue(src) : null;
+    const end = c ? c.t + playLength(c, dur) : src.startDelay + dur;
+    if (!best || end > best.end) best = { end, source: src };
+  }
+  return best;
 }

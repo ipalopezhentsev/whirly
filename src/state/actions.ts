@@ -259,6 +259,11 @@ export async function createDemo() {
   selectSound(steps.id);
 }
 
+/** Start an empty scene with default settings. The library keeps its sounds. */
+export function newScene() {
+  store.set({ scene: defaultScene(), selectedSourceId: null, setupName: null });
+}
+
 /** Remove every sound and start an empty scene. */
 export function clearLibrary() {
   store.set({ sounds: [], scene: defaultScene(), selectedSourceId: null, selectedSoundId: null });
