@@ -10,6 +10,8 @@ export interface ParamSpec {
   step: number;
   def: number;
   unit?: string;
+  /** A random seed rather than a quantity: shown with a 🎲 button, randomized for new and duplicated sources. */
+  seed?: boolean;
 }
 
 export interface MotionDef {
@@ -75,21 +77,64 @@ export const MOTIONS: Record<MotionType, MotionDef> = {
   },
   wander: {
     label: 'Random wander',
-    hint: 'Drifts smoothly around the anchor.',
+    hint: 'Drifts smoothly around the anchor. Each seed is a different path; sources with the same seed and settings move identically.',
     params: {
       radius: { label: 'Range', min: 0.5, max: 100, step: 0.5, def: 4, unit: 'm' },
       pace: { label: 'Pace', min: 0.05, max: 3, step: 0.05, def: 0.5, unit: '×' },
       vertical: { label: 'Vertical', min: 0, max: 1, step: 0.05, def: 0.3, unit: '×' },
+      seed: { label: 'Path seed', min: 0, max: 999999, step: 1, def: 0, seed: true },
     },
   },
 };
 
+const SEED_MAX = 999999;
+export const randomSeed = () => 1 + Math.floor(Math.random() * SEED_MAX);
+
+/** A stable seed from text (a source id), for saved scenes made before seeds existed. */
+export function seedFrom(text: string) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  return 1 + ((h >>> 0) % SEED_MAX);
+}
+
+/** Give every seed parameter a fresh random value (new and duplicated sources). */
+export function reseedMotion(m: Motion): Motion {
+  const params = { ...m.params };
+  for (const k of MOTION_TYPES) {
+    for (const [pk, spec] of Object.entries(MOTIONS[k].params)) {
+      if (spec.seed) params[k] = { ...params[k], [pk]: randomSeed() };
+    }
+  }
+  return { ...m, params };
+}
+
+/** Wander path shape per seed: a phase for each sine and a small spread of its rate. */
+const wanderShapes = new Map<number, { ph: number[]; f: number[] }>();
+function wanderShape(seed: number) {
+  let s = wanderShapes.get(seed);
+  if (!s) {
+    // mulberry32
+    let a = seed | 0;
+    const rnd = () => {
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    s = { ph: Array.from({ length: 6 }, () => rnd() * TAU), f: Array.from({ length: 6 }, () => 0.85 + rnd() * 0.3) };
+    if (wanderShapes.size > 500) wanderShapes.clear();
+    wanderShapes.set(seed, s);
+  }
+  return s;
+}
+
 export const MOTION_TYPES = Object.keys(MOTIONS) as MotionType[];
 
+/** Default motion settings; seeds are random, so each new source wanders its own way. */
 export function defaultMotion(): Motion {
   const params = {} as Motion['params'];
   for (const k of MOTION_TYPES) {
-    params[k] = Object.fromEntries(Object.entries(MOTIONS[k].params).map(([pk, p]) => [pk, p.def]));
+    params[k] = Object.fromEntries(Object.entries(MOTIONS[k].params).map(([pk, p]) => [pk, p.seed ? randomSeed() : p.def]));
   }
   return { type: 'static', params };
 }
@@ -139,10 +184,11 @@ export function positionAt(src: Source, t: number): Vec3 {
     case 'wander': {
       const w = p.pace * t;
       const R = p.radius * 0.5;
+      const { ph, f } = wanderShape(p.seed ?? 0);
       return {
-        x: x + R * (Math.sin(w) + Math.sin(w * 1.618 + 1.3)),
-        y: y + p.vertical * R * (Math.sin(w * 0.7 + 0.4) + 0.5 * Math.sin(w * 1.9)),
-        z: z + R * (Math.sin(w * 1.27 + 0.5) + Math.sin(w * 0.73 + 2.1)),
+        x: x + R * (Math.sin(w * f[0] + ph[0]) + Math.sin(w * 1.618 * f[1] + ph[1])),
+        y: y + p.vertical * R * (Math.sin(w * 0.7 * f[2] + ph[2]) + 0.5 * Math.sin(w * 1.9 * f[3] + ph[3])),
+        z: z + R * (Math.sin(w * 1.27 * f[4] + ph[4]) + Math.sin(w * 0.73 * f[5] + ph[5])),
       };
     }
     default:

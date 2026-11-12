@@ -6,6 +6,7 @@ import { newSeed, PRESETS, renderPreset } from '../audio/synth';
 import { ENVIRONMENTS } from '../audio/reverb';
 import { DEG, uid } from '../audio/util';
 import { defaultScene, newSource } from '../scene/scene';
+import { reseedMotion } from '../scene/motion';
 import type { EditOp, MotionType, Physics, Scene, Sound, Source, SynthRecipe, Vec3 } from '../scene/types';
 
 // ---------------------------------------------------------------- misc
@@ -102,6 +103,8 @@ export function duplicateSource(id: string) {
     ...structuredClone(src),
     id: uid(),
     name: `${src.name} copy`,
+    // Same settings, but its own random path.
+    motion: reseedMotion(src.motion),
     color: newSource(scene, null).color,
     pos: { ...src.pos, x: src.pos.x + 1 },
   };

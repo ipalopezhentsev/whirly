@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { store, useApp } from '../state/store';
 import { useFrame } from '../state/frame';
 import {
@@ -7,7 +7,7 @@ import {
 import { engine } from '../audio/engine';
 import { computeState, listenerYaw } from '../audio/spatial';
 import { DEG, fmtDist, gainToDb, wrapDeg } from '../audio/util';
-import { MOTIONS, MOTION_TYPES } from '../scene/motion';
+import { MOTIONS, MOTION_TYPES, randomSeed } from '../scene/motion';
 import type { Aim, Source } from '../scene/types';
 import { Check, Hint, Section, Select, Slider } from './controls';
 
@@ -92,7 +92,10 @@ function SourceInspector({ src, sources }: { src: Source; sources: Source[] }) {
       <Section title="Motion">
         <Select label="Path" value={src.motion.type} onChange={(t) => setMotionType(src.id, t)}
           options={MOTION_TYPES.map((t) => [t, MOTIONS[t].label] as const)} />
-        {Object.entries(mdef.params).map(([k, p]) => (
+        {Object.entries(mdef.params).map(([k, p]) => p.seed ? (
+          <SeedField key={`${src.motion.type}.${k}`} label={p.label} value={src.motion.params[src.motion.type][k]} max={p.max}
+            onChange={(v) => setMotionParam(src.id, src.motion.type, k, v)} />
+        ) : (
           <Slider key={`${src.motion.type}.${k}`} label={p.label} value={src.motion.params[src.motion.type][k]}
             min={p.min} max={p.max} step={p.step} unit={p.unit}
             onChange={(v) => setMotionParam(src.id, src.motion.type, k, v)} />
@@ -117,6 +120,28 @@ function SourceInspector({ src, sources }: { src: Source; sources: Source[] }) {
           <Hint>Omnidirectional. Tick the box to give the source a sound cone.</Hint>
         )}
       </Section>
+    </div>
+  );
+}
+
+/** A random seed: type one to repeat a path, or roll a new one. */
+function SeedField({ label, value, max, onChange }: { label: string; value: number; max: number; onChange: (v: number) => void }) {
+  const [text, setText] = useState<string | null>(null);
+  const commit = () => {
+    if (text === null) return;
+    const v = Math.round(Number(text));
+    setText(null);
+    if (Number.isFinite(v)) onChange(Math.min(max, Math.max(0, v)));
+  };
+  return (
+    <div className="ctl field" title="Each seed gives a different path">
+      <span className="lbl">{label}</span>
+      <div className="seed-row">
+        <input className="num" type="number" step={1} value={text ?? String(value)}
+          onFocus={() => setText(String(value))} onChange={(e) => setText(e.target.value)} onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setText(null); (e.target as HTMLInputElement).blur(); } }} />
+        <button className="icon" title="New random path" onClick={() => onChange(randomSeed())}>🎲</button>
+      </div>
     </div>
   );
 }

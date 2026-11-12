@@ -1,4 +1,4 @@
-import { defaultMotion, MOTIONS, MOTION_TYPES } from './motion';
+import { defaultMotion, MOTIONS, MOTION_TYPES, seedFrom } from './motion';
 import { ENVIRONMENTS } from '../audio/reverb';
 import { uid } from '../audio/util';
 import type { Scene, Source, Vec3 } from './types';
@@ -71,7 +71,14 @@ export function hydrateScene(raw: any): Scene {
   for (const src of raw.sources || []) {
     const base = newSource(s, src.soundId ?? null, src.pos);
     const motion = defaultMotion();
-    for (const k of MOTION_TYPES) motion.params[k] = { ...motion.params[k], ...(src.motion?.params?.[k] || {}) };
+    for (const k of MOTION_TYPES) {
+      const saved = src.motion?.params?.[k] || {};
+      // Seeds missing from older saves come from the source id: stable across reloads, different per source.
+      for (const [pk, spec] of Object.entries(MOTIONS[k].params)) {
+        if (spec.seed && typeof saved[pk] !== 'number') motion.params[k][pk] = seedFrom(`${src.id ?? base.id}:${k}:${pk}`);
+      }
+      motion.params[k] = { ...motion.params[k], ...saved };
+    }
     motion.type = src.motion?.type in MOTIONS ? src.motion.type : 'static';
     s.sources.push({ ...base, ...src, pos: { ...base.pos, ...src.pos }, motion });
   }

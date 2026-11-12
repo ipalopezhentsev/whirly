@@ -169,6 +169,8 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 0 4px; border: 1px sol
 .ctl .unit { color: var(--muted); font-size: 11px; }
 .ctl.field { grid-template-columns: 86px minmax(0, 1fr); }
 .ctl.field select { width: 100%; }
+.seed-row { display: flex; gap: 6px; }
+.seed-row input.num { flex: 1; text-align: left; }
 .check { display: flex; align-items: center; gap: 7px; cursor: pointer; color: var(--text); }
 .check input { accent-color: var(--accent); margin: 0; }
 .hint { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
