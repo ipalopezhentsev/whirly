@@ -7,7 +7,8 @@ import {
 import { engine } from '../audio/engine';
 import { computeState, listenerYaw } from '../audio/spatial';
 import { DEG, fmtDist, gainToDb, wrapDeg } from '../audio/util';
-import { MOTIONS, MOTION_TYPES, randomSeed } from '../scene/motion';
+import { MOTIONS, MOTION_TYPES, randomSeed, SEED_MAX } from '../scene/motion';
+import { PLAYBACKS, type Playback } from '../scene/playback';
 import type { Aim, Source } from '../scene/types';
 import { Check, Hint, Section, Select, Slider } from './controls';
 
@@ -70,9 +71,27 @@ function SourceInspector({ src, sources }: { src: Source; sources: Source[] }) {
       <Section title="Sound">
         <Select label="Sound" value={src.soundId ?? ''} onChange={(v) => patch({ soundId: v || null })}
           options={[['', '— none —'], ...sounds.map((s) => [s.id, s.name] as const)]} />
-        <Check label="Loop" checked={src.loop} onChange={(loop) => patch({ loop })} />
+        <Select<Playback> label="Plays" value={src.playback} onChange={(playback) => patch({ playback })} options={PLAYBACKS} />
         <Slider label="Gain" value={src.gainDb} min={-40} max={12} step={0.5} unit="dB" onChange={(gainDb) => patch({ gainDb })} />
         <Slider label="Starts at" value={src.startDelay} min={0} max={30} step={0.1} unit="s" onChange={(startDelay) => patch({ startDelay })} />
+        {src.playback === 'random' && (
+          <>
+            <Slider label="Pause, min" value={src.gapMin} min={0} max={120} step={0.5} unit="s" hardMax={3600}
+              title="Shortest silence between the end of one play and the start of the next"
+              onChange={(gapMin) => patch({ gapMin, gapMax: Math.max(gapMin, src.gapMax) })} />
+            <Slider label="Pause, max" value={src.gapMax} min={0} max={120} step={0.5} unit="s" hardMax={3600}
+              title="Longest silence between the end of one play and the start of the next"
+              onChange={(gapMax) => patch({ gapMax, gapMin: Math.min(gapMax, src.gapMin) })} />
+            <Slider label="Vary level" value={src.varyDb} min={0} max={12} step={0.5} unit="dB"
+              title="Each play is up to this much louder or quieter" onChange={(varyDb) => patch({ varyDb })} />
+            <Slider label="Vary pitch" value={src.varyPitch} min={0} max={12} step={0.1} unit="st"
+              title="Each play is up to this many semitones higher or lower (and correspondingly shorter or longer)"
+              onChange={(varyPitch) => patch({ varyPitch })} />
+            <SeedField label="Seed" value={src.playSeed} max={SEED_MAX} title="Each seed gives different pauses and variations" diceTitle="New random pauses and variations"
+              onChange={(playSeed) => patch({ playSeed })} />
+            <RandomStatus srcId={src.id} />
+          </>
+        )}
       </Section>
 
       <Section title={isMoving ? 'Anchor position' : 'Position'}>
@@ -94,6 +113,7 @@ function SourceInspector({ src, sources }: { src: Source; sources: Source[] }) {
           options={MOTION_TYPES.map((t) => [t, MOTIONS[t].label] as const)} />
         {Object.entries(mdef.params).map(([k, p]) => p.seed ? (
           <SeedField key={`${src.motion.type}.${k}`} label={p.label} value={src.motion.params[src.motion.type][k]} max={p.max}
+            title="Each seed gives a different path" diceTitle="New random path"
             onChange={(v) => setMotionParam(src.id, src.motion.type, k, v)} />
         ) : (
           <Slider key={`${src.motion.type}.${k}`} label={p.label} value={src.motion.params[src.motion.type][k]}
@@ -124,8 +144,25 @@ function SourceInspector({ src, sources }: { src: Source; sources: Source[] }) {
   );
 }
 
+/** Live "next play" countdown for a randomly repeating source. */
+function RandomStatus({ srcId }: { srcId: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  useFrame(() => {
+    const el = ref.current;
+    if (!el) return;
+    const st = engine.randomStatus(srcId);
+    const v = !st
+      ? 'Plays once at a random point in its first pause after “Starts at”, then again after each pause.'
+      : st.sounding ? 'Playing now.' : `Next play in ${Math.max(0, st.next - engine.time()).toFixed(1)} s.`;
+    if (el.textContent !== v) el.textContent = v;
+  });
+  return <p className="hint" ref={ref} />;
+}
+
 /** A random seed: type one to repeat a path, or roll a new one. */
-function SeedField({ label, value, max, onChange }: { label: string; value: number; max: number; onChange: (v: number) => void }) {
+function SeedField({ label, value, max, title, diceTitle, onChange }: {
+  label: string; value: number; max: number; title: string; diceTitle: string; onChange: (v: number) => void;
+}) {
   const [text, setText] = useState<string | null>(null);
   const commit = () => {
     if (text === null) return;
@@ -134,13 +171,13 @@ function SeedField({ label, value, max, onChange }: { label: string; value: numb
     if (Number.isFinite(v)) onChange(Math.min(max, Math.max(0, v)));
   };
   return (
-    <div className="ctl field" title="Each seed gives a different path">
+    <div className="ctl field" title={title}>
       <span className="lbl">{label}</span>
       <div className="seed-row">
         <input className="num" type="number" step={1} value={text ?? String(value)}
           onFocus={() => setText(String(value))} onChange={(e) => setText(e.target.value)} onBlur={commit}
           onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setText(null); (e.target as HTMLInputElement).blur(); } }} />
-        <button className="icon" title="New random path" onClick={() => onChange(randomSeed())}>🎲</button>
+        <button className="icon" title={diceTitle} onClick={() => onChange(randomSeed())}>🎲</button>
       </div>
     </div>
   );

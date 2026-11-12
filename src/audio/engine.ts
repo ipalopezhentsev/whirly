@@ -3,12 +3,19 @@
 import { audioCtx, ensureRunning } from './context';
 import {
   anySolo, applyPannerProps, applyState, buildOutput, computeState, createChain, listenerYaw,
-  setEnvironment, setListener, type Chain, type Output,
+  setEnvironment, setListener, startCue, startPlayer, type Chain, type Output,
 } from './spatial';
 import { dbToGain } from './util';
 import { store } from '../state/store';
 import { onFrame } from '../state/frame';
+import { cueAt, cueKey, nextCue } from '../scene/playback';
 import type { Selection, Sound, Source } from '../scene/types';
+
+/**
+ * Random plays are scheduled this far ahead. Generous, because background tabs get no animation
+ * frames and their timers are throttled to about once a second.
+ */
+const LOOKAHEAD = 1.5;
 
 interface Preview {
   node: AudioBufferSourceNode;
@@ -77,21 +84,19 @@ class Engine {
     const now = this.ctx.currentTime;
     ch.gain.gain.cancelScheduledValues(now);
     ch.gain.gain.setTargetAtTime(0, now, 0.015);
-    try {
-      ch.player.stop(now + 0.1);
-    } catch {
-      /* never started */
-    }
+    ch.cue = undefined;
+    const players = [...ch.players.keys()];
+    for (const p of players) p.stop(now + 0.1);
     setTimeout(() => {
       for (const n of [
-        ch.player, ch.gain, ch.delay, ch.air, ch.notch, ch.peak, ch.shelf, ch.panner, ch.send,
+        ...players, ch.gain, ch.delay, ch.air, ch.notch, ch.peak, ch.shelf, ch.panner, ch.send,
         ch.reflDelay, ch.reflAir, ch.reflPanner, ch.reflGain, ch.analyser,
       ]) n?.disconnect();
     }, 300);
   }
 
   private chainKey(src: Source, sound: Sound | undefined) {
-    return sound ? `${sound.id}:${sound.version}:${src.loop}:${src.startDelay}` : '';
+    return sound ? `${sound.id}:${sound.version}:${src.playback}:${src.startDelay}` : '';
   }
 
   /** Bring the audio graph in line with the current state. Cheap; runs on every store change. */
@@ -126,6 +131,7 @@ class Engine {
       if (existing && existing.key === key) {
         applyPannerProps(existing.panner, scene.physics, src);
         applyPannerProps(existing.reflPanner, scene.physics, { ...src, directional: false });
+        if (src.playback === 'random' && existing.cueKey !== cueKey(src)) this.reschedule(existing, src, t);
         continue;
       }
       if (existing) {
@@ -139,15 +145,70 @@ class Engine {
       applyState(ch, { ...computeState(src, scene, t, solo), gain: 0 }, ctx.currentTime, 'set');
       const startAt = this.startTime + src.startDelay;
       const dur = sound.buffer.duration;
-      if (ctx.currentTime < startAt) {
-        ch.player.start(startAt);
+      if (src.playback === 'random') {
+        // Pick up the schedule where it is now, including a play that is already under way.
+        ch.cueKey = cueKey(src);
+        ch.cue = cueAt(src, dur, t);
+        this.pump(ch, src);
+      } else if (ctx.currentTime < startAt) {
+        startPlayer(ctx, ch, startAt, { loop: src.playback === 'loop' });
       } else {
         const elapsed = ctx.currentTime - startAt;
-        if (src.loop) ch.player.start(ctx.currentTime, elapsed % dur);
-        else if (elapsed < dur) ch.player.start(ctx.currentTime, elapsed);
+        if (src.playback === 'loop') startPlayer(ctx, ch, ctx.currentTime, { offset: elapsed % dur, loop: true });
+        else if (elapsed < dur) startPlayer(ctx, ch, ctx.currentTime, { offset: elapsed });
       }
       this.chains.set(src.id, ch);
     }
+  }
+
+  /** Schedule a random source's plays that start within the lookahead. */
+  private pump(ch: Chain, src: Source) {
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    while (ch.cue && this.startTime + ch.cue.t < now + LOOKAHEAD) {
+      startCue(ctx, ch, ch.cue, this.startTime + ch.cue.t, now);
+      ch.cue = nextCue(src, ch.cue, ch.buffer.duration);
+    }
+  }
+
+  /**
+   * The pauses or seed changed: drop plays that haven't started yet and continue with the new
+   * schedule, letting one that is already sounding finish.
+   */
+  private reschedule(ch: Chain, src: Source, t: number) {
+    const now = this.ctx.currentTime;
+    for (const [p, at] of ch.players) {
+      if (at > now) {
+        p.stop();
+        ch.players.delete(p);
+      }
+    }
+    ch.cueKey = cueKey(src);
+    ch.cue = cueAt(src, ch.buffer.duration, t, true);
+    this.pump(ch, src);
+  }
+
+  /** Keep random sources' plays scheduled ahead. Runs on a timer rather than on frames, which stop in background tabs. */
+  pumpAll() {
+    if (!this.playing) return;
+    for (const src of store.get().scene.sources) {
+      const ch = this.chains.get(src.id);
+      if (ch?.cue) this.pump(ch, src);
+    }
+  }
+
+  /** Scene time (seconds) of a random source's next play, and whether it is sounding now. */
+  randomStatus(srcId: string) {
+    const ch = this.chains.get(srcId);
+    if (!this.playing || !ch?.cue) return null;
+    const now = this.ctx.currentTime;
+    let sounding = false;
+    let next = this.startTime + ch.cue.t;
+    for (const at of ch.players.values()) {
+      if (at <= now) sounding = true;
+      else next = Math.min(next, at);
+    }
+    return { sounding, next: next - this.startTime };
   }
 
   /** Per-frame update of everything that moves. */
@@ -216,3 +277,4 @@ class Engine {
 export const engine = new Engine();
 store.subscribe(() => engine.reconcile());
 onFrame(() => engine.tick());
+setInterval(() => engine.pumpAll(), 250);

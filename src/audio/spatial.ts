@@ -1,13 +1,14 @@
 // The spatial signal chain, shared by the realtime engine and the offline WAV renderer.
 //
 // Per source:
-//   player → gain → delay (propagation / Doppler) → air (low-pass) → elevation EQ → panner (HRTF + distance + cone) → master
-//             │                                       └→ send → convolver (room) → reverbReturn → master
-//             └→ reflDelay → reflAir → reflPanner → reflGain → master      (floor reflection: mirrored image source)
+//   player(s) → gain → delay (propagation / Doppler) → air (low-pass) → elevation EQ → panner (HRTF + distance + cone) → master
+//                │                                       └→ send → convolver (room) → reverbReturn → master
+//                └→ reflDelay → reflAir → reflPanner → reflGain → master      (floor reflection: mirrored image source)
 //
 // Everything that changes over time is computed by `computeState` as a pure function of scene time,
 // then pushed into AudioParams: smoothed per animation frame in realtime, or as dense linear ramps offline.
 import { motionGain, positionAt, velocityAt } from '../scene/motion';
+import { firstCue, nextCue, playLength, type Cue } from '../scene/playback';
 import type { Physics, Scene, Source, Vec3 } from '../scene/types';
 import { getImpulse } from './reverb';
 import { clamp, dbToGain, DEG } from './util';
@@ -51,7 +52,12 @@ export interface Output {
 export interface Chain {
   srcId: string;
   key: string;
-  player: AudioBufferSourceNode;
+  buffer: AudioBuffer;
+  /** Player nodes scheduled or sounding, with their start (context time): one, except for random playback, where each play gets its own. */
+  players: Map<AudioBufferSourceNode, number>;
+  /** Random playback (realtime): the next play not scheduled yet, and the settings it was worked out from. */
+  cue?: Cue;
+  cueKey?: string;
   gain: GainNode;
   delay: DelayNode;
   air: BiquadFilterNode;
@@ -234,7 +240,6 @@ export function setEnvironment(ctx: BaseAudioContext, out: Output, preset: strin
 }
 
 export function createChain(ctx: BaseAudioContext, src: Source, buffer: AudioBuffer, out: Output, ph: Physics, key = '', withAnalyser = false): Chain {
-  const player = new AudioBufferSourceNode(ctx, { buffer, loop: src.loop });
   const gain = new GainNode(ctx, { gain: 0 });
   const delay = new DelayNode(ctx, { maxDelayTime: MAX_DELAY, delayTime: 0 });
   const air = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 20000, Q: 0.707 });
@@ -243,7 +248,7 @@ export function createChain(ctx: BaseAudioContext, src: Source, buffer: AudioBuf
   const shelf = new BiquadFilterNode(ctx, { type: 'highshelf', frequency: 3500, gain: 0 });
   const panner = new PannerNode(ctx, pannerOptions(ph, src));
   const send = new GainNode(ctx, { gain: 0 });
-  player.connect(gain).connect(delay).connect(air).connect(notch).connect(peak).connect(shelf).connect(panner).connect(out.master);
+  gain.connect(delay).connect(air).connect(notch).connect(peak).connect(shelf).connect(panner).connect(out.master);
   air.connect(send);
   if (out.convolver) send.connect(out.convolver);
 
@@ -254,7 +259,7 @@ export function createChain(ctx: BaseAudioContext, src: Source, buffer: AudioBuf
   gain.connect(reflDelay).connect(reflAir).connect(reflPanner).connect(reflGain).connect(out.master);
 
   const chain: Chain = {
-    srcId: src.id, key, player, gain, delay, air, notch, peak, shelf, panner, send, reflDelay, reflAir, reflPanner, reflGain,
+    srcId: src.id, key, buffer, players: new Map(), gain, delay, air, notch, peak, shelf, panner, send, reflDelay, reflAir, reflPanner, reflGain,
   };
   if (withAnalyser) {
     chain.analyser = new AnalyserNode(ctx, { fftSize: 512 });
@@ -262,6 +267,39 @@ export function createChain(ctx: BaseAudioContext, src: Source, buffer: AudioBuf
     gain.connect(chain.analyser);
   }
   return chain;
+}
+
+export interface PlayOptions {
+  /** Seconds into the sound (buffer time) to start from. */
+  offset?: number;
+  loop?: boolean;
+  /** Level of this play alone (linear), for random variation. */
+  gain?: number;
+  playbackRate?: number;
+}
+
+/** Play the chain's sound at context time `when`. */
+export function startPlayer(ctx: BaseAudioContext, ch: Chain, when: number, { offset = 0, loop = false, gain = 1, playbackRate = 1 }: PlayOptions = {}) {
+  const p = new AudioBufferSourceNode(ctx, { buffer: ch.buffer, loop, playbackRate });
+  // The chain's gain is driven by distance and mute every frame, so a play's own level needs its own node.
+  const level = gain !== 1 ? new GainNode(ctx, { gain }) : null;
+  if (level) p.connect(level).connect(ch.gain);
+  else p.connect(ch.gain);
+  p.start(when, offset);
+  ch.players.set(p, when);
+  p.onended = () => {
+    ch.players.delete(p);
+    p.disconnect();
+    level?.disconnect();
+  };
+  return p;
+}
+
+/** Schedule a random play. If it began before `now`, join it part-way through. */
+export function startCue(ctx: BaseAudioContext, ch: Chain, c: Cue, at: number, now = at) {
+  const opts = { gain: c.gain, playbackRate: c.rate };
+  if (at >= now) startPlayer(ctx, ch, at, opts);
+  else if (now - at < playLength(c, ch.buffer.duration)) startPlayer(ctx, ch, now, { ...opts, offset: (now - at) * c.rate });
 }
 
 export type ApplyMode = 'set' | 'ramp' | 'smooth';
@@ -338,7 +376,11 @@ export async function renderScene(scene: Scene, getBuffer: (id: string | null) =
     if (!buffer || src.muted || (solo && !src.solo)) continue;
     const ch = createChain(ctx, src, buffer, out, scene.physics);
     for (let k = 0; k <= steps; k++) applyState(ch, computeState(src, scene, k * dt, solo), k * dt, k ? 'ramp' : 'set');
-    ch.player.start(src.startDelay);
+    if (src.playback === 'random') {
+      for (let c = firstCue(src); c.t < duration; c = nextCue(src, c, buffer.duration)) startCue(ctx, ch, c, c.t);
+    } else {
+      startPlayer(ctx, ch, src.startDelay, { loop: src.playback === 'loop' });
+    }
   }
   return ctx.startRendering();
 }

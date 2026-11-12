@@ -1,4 +1,5 @@
-import { defaultMotion, MOTIONS, MOTION_TYPES, seedFrom } from './motion';
+import { defaultMotion, MOTIONS, MOTION_TYPES, randomSeed, seedFrom } from './motion';
+import { PLAYBACKS } from './playback';
 import { ENVIRONMENTS } from '../audio/reverb';
 import { uid } from '../audio/util';
 import type { Scene, Source, Vec3 } from './types';
@@ -39,8 +40,13 @@ export function newSource(scene: Scene, soundId: string | null, pos: Partial<Vec
     color: COLORS[i % COLORS.length],
     soundId,
     gainDb: 0,
-    loop: true,
+    playback: 'loop',
     startDelay: 0,
+    gapMin: 5,
+    gapMax: 20,
+    varyDb: 3,
+    varyPitch: 1,
+    playSeed: randomSeed(),
     muted: false,
     solo: false,
     pos: { x: 0, y: 0, z: -2, ...pos },
@@ -80,7 +86,10 @@ export function hydrateScene(raw: any): Scene {
       motion.params[k] = { ...motion.params[k], ...saved };
     }
     motion.type = src.motion?.type in MOTIONS ? src.motion.type : 'static';
-    s.sources.push({ ...base, ...src, pos: { ...base.pos, ...src.pos }, motion });
+    const { loop, ...rest } = src; // saves made before random playback had a loop checkbox
+    const playback = PLAYBACKS.some(([p]) => p === rest.playback) ? rest.playback : loop === false ? 'once' : 'loop';
+    const playSeed = typeof rest.playSeed === 'number' ? rest.playSeed : seedFrom(`${src.id ?? base.id}:play`);
+    s.sources.push({ ...base, ...rest, playback, playSeed, pos: { ...base.pos, ...src.pos }, motion });
   }
   return s;
 }

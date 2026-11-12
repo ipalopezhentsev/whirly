@@ -87,7 +87,7 @@ export const MOTIONS: Record<MotionType, MotionDef> = {
   },
 };
 
-const SEED_MAX = 999999;
+export const SEED_MAX = 999999;
 export const randomSeed = () => 1 + Math.floor(Math.random() * SEED_MAX);
 
 /** A stable seed from text (a source id), for saved scenes made before seeds existed. */

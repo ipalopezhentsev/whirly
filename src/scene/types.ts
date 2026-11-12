@@ -1,6 +1,7 @@
 import type { CustomParams } from '../audio/synth';
 import type { SpeechParams } from '../audio/speech';
 import type { MusicParams } from '../audio/music/types';
+import type { Playback } from './playback';
 
 export interface Vec3 {
   x: number;
@@ -25,9 +26,17 @@ export interface Source {
   color: string;
   soundId: string | null;
   gainDb: number;
-  loop: boolean;
+  playback: Playback;
   /** Seconds after "play" before the sound starts. */
   startDelay: number;
+  /** Random playback: shortest and longest pause between plays, in seconds. */
+  gapMin: number;
+  gapMax: number;
+  /** Random playback: each play's level varies by up to ± this many dB, and its pitch by ± this many semitones. */
+  varyDb: number;
+  varyPitch: number;
+  /** Random playback: seed for the pauses and variations. */
+  playSeed: number;
   muted: boolean;
   solo: boolean;
   /** Anchor position in metres: +x right, +y up, −z front. */

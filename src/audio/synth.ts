@@ -212,6 +212,8 @@ export interface Preset {
   dur: number;
   /** Continuous sound: the render is made seamlessly loopable. */
   loop?: boolean;
+  /** A single event that makes no sense looped back to back: sources placed with it play at random times. */
+  oneShot?: boolean;
   /** The generator's output already loops exactly, so it is used as is. For rhythmic sounds: the usual
    *  loop cross-fade drops 0.1 s, which would cut a beat short and fade out a hit at the start. */
   seamless?: boolean;
@@ -483,7 +485,7 @@ export const PRESETS: Record<string, Preset> = {
   fire: { label: 'Fire (crackling)', dur: 10, loop: true, js: (sr, dur, len) => amb.fire(sr, dur, len, random) },
   vinyl: { label: 'Vinyl crackle', dur: 9, loop: true, seamless: true, js: (sr, dur, len) => amb.vinyl(sr, dur, len, random) },
   tape: { label: 'Tape hiss', dur: 6, loop: true, level: -20, js: (sr, dur, len) => amb.tape(sr, dur, len, random) },
-  thunder: { label: 'Thunder (storm)', dur: 10, js: (sr, dur, len) => amb.thunder(sr, dur, len, random) },
+  thunder: { label: 'Thunder (storm)', dur: 10, oneShot: true, js: (sr, dur, len) => amb.thunder(sr, dur, len, random) },
   mosquito: { label: 'Mosquito', dur: 6, loop: true, js: (sr, dur, len) => amb.mosquito(sr, dur, len, random) },
   drone: {
     label: 'Chord pad', dur: 8, loop: true,

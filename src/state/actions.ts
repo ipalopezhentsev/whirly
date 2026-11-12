@@ -6,7 +6,7 @@ import { newSeed, PRESETS, renderPreset } from '../audio/synth';
 import { ENVIRONMENTS } from '../audio/reverb';
 import { DEG, uid } from '../audio/util';
 import { defaultScene, newSource } from '../scene/scene';
-import { reseedMotion } from '../scene/motion';
+import { randomSeed, reseedMotion } from '../scene/motion';
 import type { EditOp, MotionType, Physics, Scene, Sound, Source, SynthRecipe, Vec3 } from '../scene/types';
 
 // ---------------------------------------------------------------- misc
@@ -89,7 +89,9 @@ export function addSource(soundId: string | null, pos?: Partial<Vec3>, name?: st
     const a = scene.sources.length * 50 * DEG;
     p = { x: +(3 * Math.sin(a)).toFixed(2), y: 0, z: +(-3 * Math.cos(a)).toFixed(2) };
   }
-  const src = newSource(scene, soundId, p, name ?? getSound(soundId)?.name);
+  const sound = getSound(soundId);
+  const src = newSource(scene, soundId, p, name ?? sound?.name);
+  if (sound?.recipe && PRESETS[sound.recipe.preset]?.oneShot) src.playback = 'random';
   updateScene((s) => ({ sources: [...s.sources, src] }));
   selectSource(src.id);
   return src;
@@ -105,6 +107,7 @@ export function duplicateSource(id: string) {
     name: `${src.name} copy`,
     // Same settings, but its own random path.
     motion: reseedMotion(src.motion),
+    playSeed: randomSeed(),
     color: newSource(scene, null).color,
     pos: { ...src.pos, x: src.pos.x + 1 },
   };
