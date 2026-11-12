@@ -1,0 +1,840 @@
+{
+  "v": 1,
+  "name": "scene",
+  "scene": {
+    "version": 1,
+    "masterDb": 0,
+    "listener": {
+      "yaw": 0,
+      "spin": 0
+    },
+    "environment": {
+      "preset": "cathedral",
+      "wet": 0.5
+    },
+    "physics": {
+      "panningModel": "HRTF",
+      "distanceModel": "inverse",
+      "refDistance": 1,
+      "maxDistance": 1000,
+      "rolloff": 1,
+      "doppler": true,
+      "speedOfSound": 343,
+      "air": true,
+      "airAmount": 1,
+      "elevationCues": true,
+      "elevAmount": 1,
+      "floor": true,
+      "floorAmount": 0.5,
+      "earHeight": 1.6
+    },
+    "sources": [
+      {
+        "id": "1w3jxhx0",
+        "name": "Bells",
+        "color": "#4fd1c5",
+        "soundId": 0,
+        "gainDb": 0,
+        "loop": true,
+        "startDelay": 0,
+        "muted": false,
+        "solo": false,
+        "pos": {
+          "x": -2.13,
+          "y": 0,
+          "z": -2.78
+        },
+        "motion": {
+          "type": "wander",
+          "params": {
+            "static": {},
+            "orbit": {
+              "speed": 45,
+              "bob": 0
+            },
+            "approach": {
+              "near": 1,
+              "far": 30,
+              "period": 8
+            },
+            "flyby": {
+              "speed": 20,
+              "length": 120,
+              "heading": 90
+            },
+            "pass": {
+              "speed": 20,
+              "length": 160,
+              "heading": 90,
+              "gap": 2
+            },
+            "circle": {
+              "radius": 2,
+              "speed": 90
+            },
+            "rise": {
+              "low": -1.5,
+              "high": 5,
+              "period": 6
+            },
+            "wander": {
+              "radius": 4,
+              "pace": 0.5,
+              "vertical": 0.3
+            }
+          }
+        },
+        "directional": false,
+        "aim": "listener",
+        "yaw": 0,
+        "coneInner": 90,
+        "coneOuter": 240,
+        "coneOuterGain": 0.15
+      },
+      {
+        "id": "4bz8exo8",
+        "name": "Drums",
+        "color": "#f6ad55",
+        "soundId": 1,
+        "gainDb": 3.5,
+        "loop": true,
+        "startDelay": 0,
+        "muted": false,
+        "solo": false,
+        "pos": {
+          "x": 0,
+          "y": -0.3,
+          "z": -4.5
+        },
+        "motion": {
+          "type": "wander",
+          "params": {
+            "static": {},
+            "orbit": {
+              "speed": 45,
+              "bob": 0
+            },
+            "approach": {
+              "near": 1,
+              "far": 30,
+              "period": 8
+            },
+            "flyby": {
+              "speed": 20,
+              "length": 120,
+              "heading": 90
+            },
+            "pass": {
+              "speed": 20,
+              "length": 160,
+              "heading": 90,
+              "gap": 2
+            },
+            "circle": {
+              "radius": 2,
+              "speed": 90
+            },
+            "rise": {
+              "low": -1.5,
+              "high": 5,
+              "period": 6
+            },
+            "wander": {
+              "radius": 4,
+              "pace": 0.5,
+              "vertical": 0.3
+            }
+          }
+        },
+        "directional": false,
+        "aim": "listener",
+        "yaw": 0,
+        "coneInner": 90,
+        "coneOuter": 240,
+        "coneOuterGain": 0.15
+      },
+      {
+        "id": "wh99l3si",
+        "name": "808",
+        "color": "#a78bfa",
+        "soundId": 2,
+        "gainDb": -1,
+        "loop": true,
+        "startDelay": 0,
+        "muted": false,
+        "solo": false,
+        "pos": {
+          "x": 0,
+          "y": -0.5,
+          "z": -2.6
+        },
+        "motion": {
+          "type": "static",
+          "params": {
+            "static": {},
+            "orbit": {
+              "speed": 45,
+              "bob": 0
+            },
+            "approach": {
+              "near": 1,
+              "far": 30,
+              "period": 8
+            },
+            "flyby": {
+              "speed": 20,
+              "length": 120,
+              "heading": 90
+            },
+            "pass": {
+              "speed": 20,
+              "length": 160,
+              "heading": 90,
+              "gap": 2
+            },
+            "circle": {
+              "radius": 2,
+              "speed": 90
+            },
+            "rise": {
+              "low": -1.5,
+              "high": 5,
+              "period": 6
+            },
+            "wander": {
+              "radius": 4,
+              "pace": 0.5,
+              "vertical": 0.3
+            }
+          }
+        },
+        "directional": false,
+        "aim": "listener",
+        "yaw": 0,
+        "coneInner": 90,
+        "coneOuter": 240,
+        "coneOuterGain": 0.15
+      },
+      {
+        "id": "fnky4it2",
+        "name": "Pad",
+        "color": "#f687b3",
+        "soundId": 3,
+        "gainDb": 0,
+        "loop": true,
+        "startDelay": 0,
+        "muted": false,
+        "solo": false,
+        "pos": {
+          "x": 2.13,
+          "y": 1,
+          "z": -2.78
+        },
+        "motion": {
+          "type": "static",
+          "params": {
+            "static": {},
+            "orbit": {
+              "speed": 45,
+              "bob": 0
+            },
+            "approach": {
+              "near": 1,
+              "far": 30,
+              "period": 8
+            },
+            "flyby": {
+              "speed": 20,
+              "length": 120,
+              "heading": 90
+            },
+            "pass": {
+              "speed": 20,
+              "length": 160,
+              "heading": 90,
+              "gap": 2
+            },
+            "circle": {
+              "radius": 2,
+              "speed": 90
+            },
+            "rise": {
+              "low": -1.5,
+              "high": 5,
+              "period": 6
+            },
+            "wander": {
+              "radius": 4,
+              "pace": 0.5,
+              "vertical": 0.3
+            }
+          }
+        },
+        "directional": false,
+        "aim": "listener",
+        "yaw": 0,
+        "coneInner": 90,
+        "coneOuter": 240,
+        "coneOuterGain": 0.15
+      }
+    ]
+  },
+  "sounds": [
+    {
+      "name": "♫ Trap · Bells",
+      "recipe": {
+        "seed": 3440064925,
+        "edits": [],
+        "preset": "music",
+        "dur": 54.857142857142854,
+        "music": {
+          "style": "trap",
+          "mood": "tense",
+          "key": 1,
+          "scale": "harmonicMinor",
+          "tempo": 140,
+          "meter": 4,
+          "swing": 0,
+          "humanize": 0.3,
+          "progression": "andalusian",
+          "chordBars": 2,
+          "chordSize": 3,
+          "consonance": 0.75,
+          "form": "song",
+          "sectionBars": 8,
+          "bars": 32,
+          "energy": 0.7,
+          "variation": 0.3,
+          "tracks": [
+            {
+              "id": "melody",
+              "name": "Bells",
+              "role": "melody",
+              "on": true,
+              "salt": 0,
+              "gainDb": 0,
+              "algo": "markov",
+              "rhythm": "phrase",
+              "step": 2,
+              "density": 0.45,
+              "octave": 5,
+              "range": 12,
+              "voices": 1,
+              "legato": 0.9,
+              "style": "backbeat",
+              "fills": 0.3,
+              "enter": 0,
+              "instrument": "fmbell",
+              "bright": 0.5,
+              "attack": 0.001,
+              "release": 3,
+              "detune": 0,
+              "drive": 0,
+              "vibrato": 0,
+              "echo": 0.3
+            },
+            {
+              "id": "drums",
+              "name": "Drums",
+              "role": "drums",
+              "on": true,
+              "salt": 0,
+              "gainDb": 0,
+              "algo": "markov",
+              "rhythm": "phrase",
+              "step": 4,
+              "density": 0.7,
+              "octave": 4,
+              "range": 12,
+              "voices": 1,
+              "legato": 0.9,
+              "style": "trap",
+              "fills": 0.3,
+              "enter": 0.25,
+              "instrument": "trap",
+              "bright": 0.85,
+              "attack": 0,
+              "release": 0.5,
+              "detune": 0,
+              "drive": 0,
+              "vibrato": 0,
+              "echo": 0
+            },
+            {
+              "id": "bass",
+              "name": "808",
+              "role": "bass",
+              "on": true,
+              "salt": 0,
+              "gainDb": 0,
+              "algo": "bass",
+              "rhythm": "phrase",
+              "step": 2,
+              "density": 0.35,
+              "octave": 2,
+              "range": 12,
+              "voices": 1,
+              "legato": 1,
+              "style": "backbeat",
+              "fills": 0.3,
+              "enter": 0.25,
+              "instrument": "boom",
+              "bright": 0.5,
+              "attack": 0.004,
+              "release": 1.6,
+              "detune": 0,
+              "drive": 0.35,
+              "vibrato": 0,
+              "echo": 0
+            },
+            {
+              "id": "pad",
+              "name": "Pad",
+              "role": "pad",
+              "on": true,
+              "salt": 0,
+              "gainDb": -7,
+              "algo": "chord",
+              "rhythm": "sustain",
+              "step": 1,
+              "density": 0.5,
+              "octave": 4,
+              "range": 12,
+              "voices": 4,
+              "legato": 1.05,
+              "style": "backbeat",
+              "fills": 0.3,
+              "enter": 0.5,
+              "instrument": "pad",
+              "bright": 0.25,
+              "attack": 1.2,
+              "release": 2,
+              "detune": 18,
+              "drive": 0,
+              "vibrato": 0,
+              "echo": 0
+            }
+          ],
+          "stem": "melody"
+        }
+      }
+    },
+    {
+      "name": "♫ Trap · Drums",
+      "recipe": {
+        "seed": 3440064925,
+        "edits": [],
+        "preset": "music",
+        "dur": 54.857142857142854,
+        "music": {
+          "style": "trap",
+          "mood": "tense",
+          "key": 1,
+          "scale": "harmonicMinor",
+          "tempo": 140,
+          "meter": 4,
+          "swing": 0,
+          "humanize": 0.3,
+          "progression": "andalusian",
+          "chordBars": 2,
+          "chordSize": 3,
+          "consonance": 0.75,
+          "form": "song",
+          "sectionBars": 8,
+          "bars": 32,
+          "energy": 0.7,
+          "variation": 0.3,
+          "tracks": [
+            {
+              "id": "melody",
+              "name": "Bells",
+              "role": "melody",
+              "on": true,
+              "salt": 0,
+              "gainDb": 0,
+              "algo": "markov",
+              "rhythm": "phrase",
+              "step": 2,
+              "density": 0.45,
+              "octave": 5,
+              "range": 12,
+              "voices": 1,
+              "legato": 0.9,
+              "style": "backbeat",
+              "fills": 0.3,
+              "enter": 0,
+              "instrument": "fmbell",
+              "bright": 0.5,
+              "attack": 0.001,
+              "release": 3,
+              "detune": 0,
+              "drive": 0,
+              "vibrato": 0,
+              "echo": 0.3
+            },
+            {
+              "id": "drums",
+              "name": "Drums",
+              "role": "drums",
+              "on": true,
+              "salt": 0,
+              "gainDb": 0,
+              "algo": "markov",
+              "rhythm": "phrase",
+              "step": 4,
+              "density": 0.7,
+              "octave": 4,
+              "range": 12,
+              "voices": 1,
+              "legato": 0.9,
+              "style": "trap",
+              "fills": 0.3,
+              "enter": 0.25,
+              "instrument": "trap",
+              "bright": 0.85,
+              "attack": 0,
+              "release": 0.5,
+              "detune": 0,
+              "drive": 0,
+              "vibrato": 0,
+              "echo": 0
+            },
+            {
+              "id": "bass",
+              "name": "808",
+              "role": "bass",
+              "on": true,
+              "salt": 0,
+              "gainDb": 0,
+              "algo": "bass",
+              "rhythm": "phrase",
+              "step": 2,
+              "density": 0.35,
+              "octave": 2,
+              "range": 12,
+              "voices": 1,
+              "legato": 1,
+              "style": "backbeat",
+              "fills": 0.3,
+              "enter": 0.25,
+              "instrument": "boom",
+              "bright": 0.5,
+              "attack": 0.004,
+              "release": 1.6,
+              "detune": 0,
+              "drive": 0.35,
+              "vibrato": 0,
+              "echo": 0
+            },
+            {
+              "id": "pad",
+              "name": "Pad",
+              "role": "pad",
+              "on": true,
+              "salt": 0,
+              "gainDb": -7,
+              "algo": "chord",
+              "rhythm": "sustain",
+              "step": 1,
+              "density": 0.5,
+              "octave": 4,
+              "range": 12,
+              "voices": 4,
+              "legato": 1.05,
+              "style": "backbeat",
+              "fills": 0.3,
+              "enter": 0.5,
+              "instrument": "pad",
+              "bright": 0.25,
+              "attack": 1.2,
+              "release": 2,
+              "detune": 18,
+              "drive": 0,
+              "vibrato": 0,
+              "echo": 0
+            }
+          ],
+          "stem": "drums"
+        }
+      }
+    },
+    {
+      "name": "♫ Trap · 808",
+      "recipe": {
+        "seed": 3440064925,
+        "edits": [],
+        "preset": "music",
+        "dur": 54.857142857142854,
+        "music": {
+          "style": "trap",
+          "mood": "tense",
+          "key": 1,
+          "scale": "harmonicMinor",
+          "tempo": 140,
+          "meter": 4,
+          "swing": 0,
+          "humanize": 0.3,
+          "progression": "andalusian",
+          "chordBars": 2,
+          "chordSize": 3,
+          "consonance": 0.75,
+          "form": "song",
+          "sectionBars": 8,
+          "bars": 32,
+          "energy": 0.7,
+          "variation": 0.3,
+          "tracks": [
+            {
+              "id": "melody",
+              "name": "Bells",
+              "role": "melody",
+              "on": true,
+              "salt": 0,
+              "gainDb": 0,
+              "algo": "markov",
+              "rhythm": "phrase",
+              "step": 2,
+              "density": 0.45,
+              "octave": 5,
+              "range": 12,
+              "voices": 1,
+              "legato": 0.9,
+              "style": "backbeat",
+              "fills": 0.3,
+              "enter": 0,
+              "instrument": "fmbell",
+              "bright": 0.5,
+              "attack": 0.001,
+              "release": 3,
+              "detune": 0,
+              "drive": 0,
+              "vibrato": 0,
+              "echo": 0.3
+            },
+            {
+              "id": "drums",
+              "name": "Drums",
+              "role": "drums",
+              "on": true,
+              "salt": 0,
+              "gainDb": 0,
+              "algo": "markov",
+              "rhythm": "phrase",
+              "step": 4,
+              "density": 0.7,
+              "octave": 4,
+              "range": 12,
+              "voices": 1,
+              "legato": 0.9,
+              "style": "trap",
+              "fills": 0.3,
+              "enter": 0.25,
+              "instrument": "trap",
+              "bright": 0.85,
+              "attack": 0,
+              "release": 0.5,
+              "detune": 0,
+              "drive": 0,
+              "vibrato": 0,
+              "echo": 0
+            },
+            {
+              "id": "bass",
+              "name": "808",
+              "role": "bass",
+              "on": true,
+              "salt": 0,
+              "gainDb": 0,
+              "algo": "bass",
+              "rhythm": "phrase",
+              "step": 2,
+              "density": 0.35,
+              "octave": 2,
+              "range": 12,
+              "voices": 1,
+              "legato": 1,
+              "style": "backbeat",
+              "fills": 0.3,
+              "enter": 0.25,
+              "instrument": "boom",
+              "bright": 0.5,
+              "attack": 0.004,
+              "release": 1.6,
+              "detune": 0,
+              "drive": 0.35,
+              "vibrato": 0,
+              "echo": 0
+            },
+            {
+              "id": "pad",
+              "name": "Pad",
+              "role": "pad",
+              "on": true,
+              "salt": 0,
+              "gainDb": -7,
+              "algo": "chord",
+              "rhythm": "sustain",
+              "step": 1,
+              "density": 0.5,
+              "octave": 4,
+              "range": 12,
+              "voices": 4,
+              "legato": 1.05,
+              "style": "backbeat",
+              "fills": 0.3,
+              "enter": 0.5,
+              "instrument": "pad",
+              "bright": 0.25,
+              "attack": 1.2,
+              "release": 2,
+              "detune": 18,
+              "drive": 0,
+              "vibrato": 0,
+              "echo": 0
+            }
+          ],
+          "stem": "bass"
+        }
+      }
+    },
+    {
+      "name": "♫ Trap · Pad",
+      "recipe": {
+        "seed": 3440064925,
+        "edits": [],
+        "preset": "music",
+        "dur": 54.857142857142854,
+        "music": {
+          "style": "trap",
+          "mood": "tense",
+          "key": 1,
+          "scale": "harmonicMinor",
+          "tempo": 140,
+          "meter": 4,
+          "swing": 0,
+          "humanize": 0.3,
+          "progression": "andalusian",
+          "chordBars": 2,
+          "chordSize": 3,
+          "consonance": 0.75,
+          "form": "song",
+          "sectionBars": 8,
+          "bars": 32,
+          "energy": 0.7,
+          "variation": 0.3,
+          "tracks": [
+            {
+              "id": "melody",
+              "name": "Bells",
+              "role": "melody",
+              "on": true,
+              "salt": 0,
+              "gainDb": 0,
+              "algo": "markov",
+              "rhythm": "phrase",
+              "step": 2,
+              "density": 0.45,
+              "octave": 5,
+              "range": 12,
+              "voices": 1,
+              "legato": 0.9,
+              "style": "backbeat",
+              "fills": 0.3,
+              "enter": 0,
+              "instrument": "fmbell",
+              "bright": 0.5,
+              "attack": 0.001,
+              "release": 3,
+              "detune": 0,
+              "drive": 0,
+              "vibrato": 0,
+              "echo": 0.3
+            },
+            {
+              "id": "drums",
+              "name": "Drums",
+              "role": "drums",
+              "on": true,
+              "salt": 0,
+              "gainDb": 0,
+              "algo": "markov",
+              "rhythm": "phrase",
+              "step": 4,
+              "density": 0.7,
+              "octave": 4,
+              "range": 12,
+              "voices": 1,
+              "legato": 0.9,
+              "style": "trap",
+              "fills": 0.3,
+              "enter": 0.25,
+              "instrument": "trap",
+              "bright": 0.85,
+              "attack": 0,
+              "release": 0.5,
+              "detune": 0,
+              "drive": 0,
+              "vibrato": 0,
+              "echo": 0
+            },
+            {
+              "id": "bass",
+              "name": "808",
+              "role": "bass",
+              "on": true,
+              "salt": 0,
+              "gainDb": 0,
+              "algo": "bass",
+              "rhythm": "phrase",
+              "step": 2,
+              "density": 0.35,
+              "octave": 2,
+              "range": 12,
+              "voices": 1,
+              "legato": 1,
+              "style": "backbeat",
+              "fills": 0.3,
+              "enter": 0.25,
+              "instrument": "boom",
+              "bright": 0.5,
+              "attack": 0.004,
+              "release": 1.6,
+              "detune": 0,
+              "drive": 0.35,
+              "vibrato": 0,
+              "echo": 0
+            },
+            {
+              "id": "pad",
+              "name": "Pad",
+              "role": "pad",
+              "on": true,
+              "salt": 0,
+              "gainDb": -7,
+              "algo": "chord",
+              "rhythm": "sustain",
+              "step": 1,
+              "density": 0.5,
+              "octave": 4,
+              "range": 12,
+              "voices": 4,
+              "legato": 1.05,
+              "style": "backbeat",
+              "fills": 0.3,
+              "enter": 0.5,
+              "instrument": "pad",
+              "bright": 0.25,
+              "attack": 1.2,
+              "release": 2,
+              "detune": 18,
+              "drive": 0,
+              "vibrato": 0,
+              "echo": 0
+            }
+          ],
+          "stem": "pad"
+        }
+      }
+    }
+  ]
+}
