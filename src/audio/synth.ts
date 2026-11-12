@@ -2,6 +2,7 @@
 import { fromData, normalize, loopCrossfade, edgeFade } from './buffers';
 import { TAU } from './util';
 import { renderSpeech, type SpeechParams } from './speech';
+import * as amb from './ambience';
 import { renderMusicAsync } from './music/client';
 import type { MusicParams } from './music/types';
 
@@ -211,6 +212,12 @@ export interface Preset {
   dur: number;
   /** Continuous sound: the render is made seamlessly loopable. */
   loop?: boolean;
+  /** The generator's output already loops exactly, so it is used as is. For rhythmic sounds: the usual
+   *  loop cross-fade drops 0.1 s, which would cut a beat short and fade out a hit at the start. */
+  seamless?: boolean;
+  /** Peak level the render is normalized to, in dB (default −3). Lower for sounds that are all body
+   *  and no peaks, such as steady hiss, which would otherwise come out far louder than the rest. */
+  level?: number;
   render?: (ctx: BaseAudioContext, out: AudioNode, dur: number, params: CustomParams) => void;
   js?: (sr: number, dur: number, len: number) => Float32Array;
   /** Speaks text instead, when the recipe has some. */
@@ -465,30 +472,19 @@ export const PRESETS: Record<string, Preset> = {
       }
     },
   },
-  rain: {
-    label: 'Rain', dur: 8, loop: true,
-    js(sr, dur, len) {
-      const d = noiseData(len, 'pink');
-      let lp = 0;
-      for (let i = 0; i < len; i++) {
-        lp += 0.3 * (d[i] - lp);
-        d[i] = lp * 0.35;
-      }
-      const drops = Math.floor(dur * 90);
-      const L = Math.floor(sr * 0.02);
-      for (let k = 0; k < drops; k++) {
-        const start = Math.floor(random() * len);
-        const f = rand(1500, 6000);
-        const a = rand(0.05, 0.4) ** 2 * 2;
-        const decay = rand(0.002, 0.006);
-        for (let j = 0; j < L && start + j < len; j++) {
-          const tt = j / sr;
-          d[start + j] += a * Math.sin(TAU * f * tt) * Math.exp(-tt / decay);
-        }
-      }
-      return d;
-    },
-  },
+  // Ambiences (see ./ambience). `random` is read at call time, so a seeded render stays seeded.
+  rain: { label: 'Rain', dur: 10, loop: true, js: (sr, dur, len) => amb.rain(sr, dur, len, random) },
+  stream: { label: 'Stream (babbling brook)', dur: 10, loop: true, js: (sr, dur, len) => amb.stream(sr, dur, len, random) },
+  sea: { label: 'Sea waves', dur: 16, loop: true, seamless: true, js: (sr, dur, len) => amb.sea(sr, dur, len, random) },
+  wind: { label: 'Wind (gusty)', dur: 12, loop: true, js: (sr, dur, len) => amb.wind(sr, dur, len, random) },
+  crowd: { label: 'Crowd murmur', dur: 12, loop: true, js: (sr, dur, len) => amb.crowd(sr, dur, len, random) },
+  train: { label: 'Train (clickety-clack)', dur: 12, loop: true, seamless: true, js: (sr, dur, len) => amb.train(sr, dur, len, random) },
+  factory: { label: 'Factory floor', dur: 12, loop: true, seamless: true, js: (sr, dur, len) => amb.factory(sr, dur, len, random) },
+  fire: { label: 'Fire (crackling)', dur: 10, loop: true, js: (sr, dur, len) => amb.fire(sr, dur, len, random) },
+  vinyl: { label: 'Vinyl crackle', dur: 9, loop: true, seamless: true, js: (sr, dur, len) => amb.vinyl(sr, dur, len, random) },
+  tape: { label: 'Tape hiss', dur: 6, loop: true, level: -20, js: (sr, dur, len) => amb.tape(sr, dur, len, random) },
+  thunder: { label: 'Thunder (storm)', dur: 10, js: (sr, dur, len) => amb.thunder(sr, dur, len, random) },
+  mosquito: { label: 'Mosquito', dur: 6, loop: true, js: (sr, dur, len) => amb.mosquito(sr, dur, len, random) },
   drone: {
     label: 'Chord pad', dur: 8, loop: true,
     render(ctx, out) {
@@ -504,23 +500,7 @@ export const PRESETS: Record<string, Preset> = {
       }
     },
   },
-  tick: {
-    label: 'Clock tick-tock', dur: 4,
-    js(sr, dur, len) {
-      const d = new Float32Array(len);
-      let k = 0;
-      for (let t = 0.02; t < dur - 0.05; t += 0.5, k++) {
-        const f = k % 2 ? 2500 : 3200;
-        const s = Math.floor(t * sr);
-        const n = Math.floor(0.03 * sr);
-        for (let j = 0; j < n && s + j < len; j++) {
-          const tt = j / sr;
-          d[s + j] += (Math.sin(TAU * f * tt) * 0.8 + (random() * 2 - 1) * 0.3) * Math.exp(-tt / 0.004);
-        }
-      }
-      return d;
-    },
-  },
+  tick: { label: 'Clock tick-tock', dur: 4, loop: true, seamless: true, js: (sr, dur, len) => amb.clock(sr, dur, len, random) },
   custom: { label: 'Custom synth…', dur: 2, render: renderCustom },
   music: { label: 'Algorithmic music', dur: 60, music: true },
 };
@@ -565,6 +545,6 @@ export async function renderPreset(
   }
   data ??= (await ctx!.startRendering()).getChannelData(0);
   let buf = fromData(data, sampleRate);
-  buf = p.loop && dur > 0.5 ? loopCrossfade(buf, Math.min(0.1, dur * 0.1)) : edgeFade(buf);
-  return normalize(buf, -3);
+  if (!p.seamless) buf = p.loop && dur > 0.5 ? loopCrossfade(buf, Math.min(0.1, dur * 0.1)) : edgeFade(buf);
+  return normalize(buf, p.level ?? -3);
 }
