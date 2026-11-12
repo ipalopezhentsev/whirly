@@ -225,7 +225,10 @@ function setMotion(id: string, type: MotionType, params: Record<string, number>)
   }));
 }
 
-/** Demo: a cathedral with someone walking around, a bee darting about, and an ambulance passing behind. */
+/**
+ * Built-in demo: a cathedral with someone walking around, a bee darting about, and an ambulance
+ * passing behind. Only a fallback: the demo visitors see is the scene saved in demo.txt (see demo.ts).
+ */
 export async function createDemo() {
   const bee = await synthSound('Bee', { preset: 'bee', dur: 6 });
   const siren = await synthSound('Siren', { preset: 'siren', dur: 6 });
@@ -249,8 +252,8 @@ export async function createDemo() {
   selectSound(steps.id);
 }
 
-export async function resetToDemo() {
+/** Remove every sound and start an empty scene. */
+export function clearLibrary() {
   store.set({ sounds: [], scene: defaultScene(), selectedSourceId: null, selectedSoundId: null });
   undoStacks.clear();
-  await createDemo();
 }

@@ -120,6 +120,7 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 0 4px; border: 1px sol
 .setups-pop { width: 360px; }
 .setup-save { display: flex; gap: 6px; }
 .setup-save input { flex: 1; min-width: 0; }
+.setup-sec { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
 .setup-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 50vh; overflow: auto; }
 .setup-list li { display: flex; align-items: center; gap: 4px; border-radius: 6px; }
 .setup-list li.on { background: var(--bg); box-shadow: inset 2px 0 0 var(--accent); }
@@ -153,6 +154,8 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 0 4px; border: 1px sol
 
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; display: grid; gap: 8px; }
 .pane { display: grid; gap: 8px; }
+/* Single-column grids never grow wider than their container, whatever their content's min-content width. */
+.card, .pane, .sound-list, .synth-settings, .speed { grid-template-columns: minmax(0, 1fr); }
 
 .seg { display: flex; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 2px; gap: 2px; }
 .seg button { flex: 1; border: none; background: transparent; padding: 5px 6px; color: var(--muted); }
@@ -224,7 +227,12 @@ details[open] { display: grid; gap: 7px; }
 
 .editor .ed-head { display: flex; gap: 6px; }
 .name-in { flex: 1; min-width: 0; width: 100%; font-weight: 600; }
-.wave { width: 100%; height: 96px; border-radius: 6px; display: block; cursor: text; touch-action: none; }
+.wave {
+  width: 100%; height: 96px; border-radius: 6px; display: block; cursor: text; touch-action: none;
+  /* Its pixel buffer is CSS size × devicePixelRatio. Without this, that intrinsic width feeds back into the
+     grids around it on HiDPI screens, widening the panel a little more on every resize. */
+  contain: size;
+}
 .ed-info { color: var(--muted); font-size: 11px; }
 .btns { display: flex; flex-wrap: wrap; gap: 4px; }
 .btns.ops button { font-size: 12px; padding: 3px 8px; }

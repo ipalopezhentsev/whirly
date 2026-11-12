@@ -347,6 +347,61 @@ export const PRESETS: Record<string, Preset> = {
       }
     },
   },
+  gunfire: {
+    label: 'Automatic gunfire (random bursts)', dur: 8,
+    js(sr, dur, len) {
+      const d = new Float32Array(len);
+      // One-pole low-pass coefficient for a cutoff, so the timbre doesn't depend on the sample rate.
+      const k = (fc: number) => 1 - Math.exp(-TAU * fc / sr);
+      const kBody = k(3000);
+      const kTail = k(500);
+      const kClick = k(6000);
+      const shot = (t0: number, amp: number, bright: number) => {
+        const s0 = Math.floor(t0 * sr);
+        const n = Math.min(len - s0, Math.floor(0.4 * sr));
+        const f0 = rand(65, 90);
+        const clickAt = rand(0.018, 0.026); // the bolt cycling, just after the report
+        let body = 0, tail = 0, click = 0, ph = 0;
+        for (let j = 0; j < n; j++) {
+          const t = j / sr;
+          const w = random() * 2 - 1;
+          body += kBody * (w - body);
+          tail += kTail * (w - tail);
+          // Muzzle report: a raw-noise crack, a mid-band blast and a falling low thump.
+          const crack = w * Math.exp(-t / 0.0025) * bright;
+          const blast = body * Math.exp(-t / 0.035) * 2.2;
+          ph += TAU * f0 * (1 + 1.8 * Math.exp(-t / 0.008)) / sr;
+          const thump = Math.sin(ph) * Math.exp(-t / 0.05) * 0.8;
+          // A darker rumble that rings on, overlapping the next shots in a burst.
+          const rumble = tail * Math.exp(-t / 0.14) * 3;
+          let mech = 0;
+          if (t > clickAt) {
+            click += kClick * (w - click);
+            mech = (w - click) * Math.exp(-(t - clickAt) / 0.0015) * 0.12;
+          }
+          d[s0 + j] += amp * (crack + blast + thump + rumble + mech);
+        }
+      };
+      // One weapon per render: its cyclic rate stays put, the bursts (length, gaps) are random.
+      const period = 60 / rand(600, 900);
+      let t = rand(0.05, 0.4);
+      while (t < dur - 0.3) {
+        const r = random();
+        const shots = r < 0.15 ? 1 + Math.floor(rand(0, 2)) // single or double tap
+          : r < 0.75 ? 3 + Math.floor(rand(0, 5)) // short burst
+          : 8 + Math.floor(rand(0, 18)); // long burst
+        const p = period * rand(0.97, 1.03);
+        for (let i = 0; i < shots && t < dur - 0.3; i++) {
+          shot(t, rand(0.8, 1), rand(0.8, 1.2));
+          t += p * rand(0.96, 1.04);
+        }
+        t += rand(0.3, 2.2);
+      }
+      // Gentle saturation squashes the overlapping tails into a denser, punchier burst.
+      for (let i = 0; i < len; i++) d[i] = Math.tanh(d[i] * 0.8);
+      return d;
+    },
+  },
   voice: {
     label: 'Synthetic voice (text or babble)', dur: 8, speech: true,
     render(ctx, out, dur) {

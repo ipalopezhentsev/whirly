@@ -1,5 +1,6 @@
 import { useApp } from '../state/store';
-import { patchPhysics, resetToDemo, setEnvironmentPreset, setListenerHeight, updateScene } from '../state/actions';
+import { patchPhysics, setEnvironmentPreset, setListenerHeight, updateScene } from '../state/actions';
+import { resetToDemo } from '../state/builtin';
 import { engine } from '../audio/engine';
 import { ENVIRONMENTS } from '../audio/reverb';
 import { Check, Hint, Section, Select, Slider } from './controls';

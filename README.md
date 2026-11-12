@@ -13,7 +13,7 @@ Use headphones — the HRTF panner only works properly over headphones.
 ## What it does
 
 **Sounds** (left panel)
-- *Synthesize* — presets (bee, siren, engine, helicopter, footsteps, voice babble, birds, bell, rain, …) or a custom synth (waveform/noise, pitch sweep, ADSR, filter, vibrato, tremolo, repeat).
+- *Synthesize* — presets (bee, siren, engine, helicopter, footsteps, automatic gunfire, voice babble, birds, bell, rain, …) or a custom synth (waveform/noise, pitch sweep, ADSR, filter, vibrato, tremolo, repeat).
 - *Record* from the microphone, optionally raw (no echo cancellation / noise suppression).
 - *Import* any audio file the browser can decode. Everything is mixed to mono — sources are point sources.
 - *Edit*: select on the waveform, then crop / delete / silence / reverse / normalize / fade / gain / trim silence / seamless-loop cross-fade / speed change, with undo. Download any sound as WAV.
@@ -21,6 +21,8 @@ Use headphones — the HRTF panner only works properly over headphones.
 **Scene** (centre) — a 3D view (three.js): orbit/pan/zoom the camera. Every source has a stem down to the floor and a floor shadow, so height is visible at a glance. Drag a ball to move it, drag the white ⇕ handle on the selected source to change its height, double-click the floor to add a source.
 
 **Setups** — *💾 Setups* saves the current scene under a name in this browser (IndexedDB) and lists saved setups to open again. Each setup keeps its sounds at full quality, so it still opens after those sounds are deleted from the library; audio shared by several setups is stored once.
+
+**Built-in setups** — every JSON file in [`src/presets/`](src/presets/) is a built-in setup, listed in *💾 Setups* for everyone. `demo.json` is the demo: what a first-time visitor sees (no saved work, no share link) and what *Reset to demo* restores; without it a small hard-coded demo is used. To add or update one, build the scene, then *💾 Setups → ⬇ JSON* and save the file into `src/presets/` (the file is named after the setup name in the box). The format is the share-link payload as readable JSON: synthesized sounds as recipes, recorded/imported ones as embedded 24 kHz µ-law audio.
 
 **Share** — *🔗 Share* copies a link that holds the whole scene. Synthesized sounds travel as their recipe (preset, settings, random seed and edits), so the link stays short; recorded or imported sounds are embedded as compressed audio, which makes the link much longer.
 

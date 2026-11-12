@@ -1,7 +1,8 @@
 // Startup: restore saved work (or create the demo), then open a share link if the URL has one.
 import { store } from './store';
 import { loadAll, startAutosave } from './persist';
-import { createDemo, toast } from './actions';
+import { toast } from './actions';
+import { openDemo } from './builtin';
 import { openSharedFromHash, sharedFromHash } from './share';
 import { fromData } from '../audio/buffers';
 import { defaultScene, hydrateScene } from '../scene/scene';
@@ -21,7 +22,7 @@ export async function boot() {
   } else {
     store.set({ scene: defaultScene() });
     // A first-time visitor with a share link gets the shared scene instead of the demo.
-    if (!(await openSharedFromHash(false))) await createDemo();
+    if (!(await openSharedFromHash(false))) await openDemo();
     startAutosave(false);
   }
   store.set({ ready: true });

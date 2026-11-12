@@ -23,8 +23,11 @@ export const LONG_URL = 8000;
 interface SharedSound {
   name: string;
   recipe?: SynthRecipe;
-  /** Embedded µ-law audio: sample rate and byte count, in payload order. */
-  audio?: { sr: number; n: number };
+  /**
+   * Embedded µ-law audio: sample rate and byte count. Share links append the bytes after the JSON,
+   * in payload order; scene files carry them inline as base64url `data`.
+   */
+  audio?: { sr: number; n: number; data?: string };
 }
 
 interface Payload {
@@ -44,7 +47,8 @@ export interface ShareLink {
 
 // ---------------------------------------------------------------- encode
 
-export async function buildShareLink(): Promise<ShareLink> {
+/** The current scene and the sounds its sources use, with the audio of non-synthesized sounds in `blobs`. */
+async function packScene() {
   const { scene, sounds } = store.get();
   const used = sounds.filter((s) => scene.sources.some((src) => src.soundId === s.id));
   const index = new Map(used.map((s, i) => [s.id, i]));
@@ -68,6 +72,12 @@ export async function buildShareLink(): Promise<ShareLink> {
     scene: { ...scene, sources: scene.sources.map((src) => ({ ...src, soundId: index.get(src.soundId ?? '') ?? null })) },
     sounds: shared,
   };
+  return { payload, blobs, embeddedSecs };
+}
+
+export async function buildShareLink(): Promise<ShareLink> {
+  const { payload, blobs, embeddedSecs } = await packScene();
+  const shared = payload.sounds;
   const json = new TextEncoder().encode(JSON.stringify(payload));
   const raw = new Uint8Array(4 + json.length + blobs.reduce((n, b) => n + b.length, 0));
   new DataView(raw.buffer).setUint32(0, json.length, true);
@@ -125,10 +135,22 @@ export async function openShared(data: string) {
   if (payload?.v !== VERSION || !Array.isArray(payload.sounds) || !Array.isArray(payload.scene?.sources)) {
     throw new Error('the link is from a different version of Whirly');
   }
+  let at = 0;
+  return unpackScene(payload, (s) => {
+    const bytes = raw.subarray(at, at + s.n);
+    at += s.n;
+    if (bytes.length !== s.n) throw new Error('the link was cut off');
+    return bytes;
+  });
+}
 
+/**
+ * Make a packed scene the current one, adding its sounds to the library. `audioOf` returns the
+ * µ-law bytes of each embedded (non-synthesized) sound, called in payload order.
+ */
+async function unpackScene(payload: Payload, audioOf: (a: NonNullable<SharedSound['audio']>) => Uint8Array) {
   if (store.get().playing) engine.stop();
   const ids: string[] = [];
-  let at = 0;
   for (const s of payload.sounds) {
     let sound: Sound | undefined;
     if (s.recipe) {
@@ -137,9 +159,7 @@ export async function openShared(data: string) {
       sound = store.get().sounds.find((x) => x.recipe && JSON.stringify(x.recipe) === key);
       sound ??= addSound(s.name, await renderRecipe(s.recipe), s.recipe);
     } else if (s.audio) {
-      const bytes = raw.subarray(at, at + s.audio.n);
-      at += s.audio.n;
-      if (bytes.length !== s.audio.n) throw new Error('the link was cut off');
+      const bytes = audioOf(s.audio);
       const d = new Float32Array(bytes.length);
       for (let i = 0; i < bytes.length; i++) d[i] = muLawDecode(bytes[i]);
       sound = addSound(s.name, fromData(d, s.audio.sr));
@@ -176,6 +196,33 @@ export async function openSharedFromHash(confirmReplace: boolean) {
     toast(`Could not open the shared scene: ${(e as Error).message}`, 'error');
     return false;
   }
+}
+
+// ---------------------------------------------------------------- scene files
+
+/** A scene as a readable JSON file, the format of the built-in setups in src/presets/. */
+export interface SceneFile extends Payload {
+  name: string;
+}
+
+/** The current scene as a scene file. */
+export async function buildSceneFile(name: string): Promise<SceneFile> {
+  const { payload, blobs } = await packScene();
+  let i = 0;
+  const sounds = payload.sounds.map((s) => (s.audio ? { ...s, audio: { ...s.audio, data: toBase64Url(blobs[i++]) } } : s));
+  return { v: payload.v, name, scene: payload.scene, sounds };
+}
+
+/** Make a scene file's scene the current one, adding its sounds to the library. */
+export async function openSceneFile(file: SceneFile) {
+  if (file?.v !== VERSION || !Array.isArray(file.sounds) || !Array.isArray(file.scene?.sources)) {
+    throw new Error('the file is not a Whirly scene, or is from a different version');
+  }
+  return unpackScene(file, (a) => {
+    const bytes = a.data ? fromBase64Url(a.data) : new Uint8Array();
+    if (bytes.length !== a.n) throw new Error('embedded audio is damaged');
+    return bytes;
+  });
 }
 
 // ---------------------------------------------------------------- bytes
