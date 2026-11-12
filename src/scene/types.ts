@@ -1,5 +1,6 @@
 import type { CustomParams } from '../audio/synth';
 import type { SpeechParams } from '../audio/speech';
+import type { MusicParams } from '../audio/music/types';
 
 export interface Vec3 {
   x: number;
@@ -93,6 +94,8 @@ export interface SynthRecipe {
   params?: CustomParams;
   /** Text and voice settings (only for the 'voice' preset when it speaks text). */
   speech?: SpeechParams;
+  /** Composition settings (only for the 'music' preset); `music.stem` makes the sound one track's stem. */
+  music?: MusicParams;
   edits: EditOp[];
 }
 

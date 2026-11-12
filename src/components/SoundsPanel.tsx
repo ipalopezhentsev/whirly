@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useApp } from '../state/store';
+import { store, useApp } from '../state/store';
 import { useFrame } from '../state/frame';
 import {
   addSound, addSource, canUndo, deleteSound, deleteSounds, editSound, makeRecipe, renameSound, renderRecipe,
@@ -15,7 +15,11 @@ import { downloadBlob, encodeWav, safeFileName } from '../audio/wav';
 import { fmtTime } from '../audio/util';
 import { Check, Hint, Select, Seg, Slider } from './controls';
 import { Waveform } from './Waveform';
+import { ComposeCreator, MusicSettings } from './MusicEditor';
 import type { EditKind, Selection, Sound, SynthRecipe } from '../scene/types';
+
+/** Synth presets to choose from; compositions have their own Compose tab. */
+const SYNTH_OPTIONS = Object.entries(PRESETS).filter(([, p]) => !p.music).map(([k, p]) => [k, p.label] as const);
 
 /** Default name for a synthesized sound: its text when it speaks, else the preset. */
 function synthName(r: Pick<SynthRecipe, 'preset' | 'speech'> | undefined) {
@@ -32,13 +36,14 @@ function isAutoName(name: string, r: SynthRecipe) {
 }
 
 export function SoundsPanel() {
-  const [tab, setTab] = useState<'synth' | 'record' | 'file'>('synth');
+  const [tab, setTab] = useState<'synth' | 'compose' | 'record' | 'file'>('synth');
   return (
     <aside className="panel left">
       <h2>Sounds</h2>
       <div className="card">
-        <Seg value={tab} onChange={setTab} options={[['synth', 'Synthesize'], ['record', 'Record'], ['file', 'Import']]} />
+        <Seg value={tab} onChange={setTab} options={[['synth', 'Synth'], ['compose', 'Compose'], ['record', 'Record'], ['file', 'Import']]} />
         {tab === 'synth' && <SynthCreator />}
+        {tab === 'compose' && <ComposeCreator />}
         {tab === 'record' && <RecordCreator />}
         {tab === 'file' && <FileCreator />}
       </div>
@@ -68,8 +73,7 @@ function SynthCreator() {
 
   return (
     <div className="pane">
-      <Select label="Preset" value={preset} onChange={setPreset}
-        options={Object.entries(PRESETS).map(([k, p]) => [k, p.label] as const)} />
+      <Select label="Preset" value={preset} onChange={setPreset} options={SYNTH_OPTIONS} />
       <button className="primary wide" onClick={add} disabled={busy}>{busy ? 'Rendering…' : '✦ Add sound'}</button>
       <Hint>Its settings (text, pitch, length…) are edited on the sound itself, in its editor below.</Hint>
     </div>
@@ -123,7 +127,7 @@ function SynthSettings({ sound }: { sound: Sound }) {
 
   return (
     <div className="synth-settings">
-      <Select label="Preset" value={d.preset} options={Object.entries(PRESETS).map(([k, p]) => [k, p.label] as const)}
+      <Select label="Preset" value={d.preset} options={SYNTH_OPTIONS}
         onChange={(k) => setD((x) => ({ ...x, preset: k, dur: PRESETS[k].dur }))} />
       {speaks && (
         <>
@@ -287,7 +291,10 @@ function SoundList() {
     // A sound added from now on opens right away, ready to edit (not everything at startup).
     if (known.current) {
       const added = ids.filter((id) => !known.current!.has(id));
-      if (added.length) setOpen((o) => new Set([...o, ...added]));
+      // Many at once (a band's stems, a shared scene): open just the selected one.
+      const sel = store.get().selectedSoundId;
+      const show = added.length <= 2 ? added : added.filter((id) => id === sel);
+      if (show.length) setOpen((o) => new Set([...o, ...show]));
     }
     known.current = new Set(ids);
   }, [sounds]);
@@ -393,7 +400,7 @@ function EditorFor({ sound }: { sound: Sound }) {
         <button className="icon danger" title="Delete sound"
           onClick={() => { if (confirm(`Delete “${sound.name}”?`)) { engine.stopPreview(); deleteSound(sound.id); } }}>✕</button>
       </div>
-      {sound.recipe && <SynthSettings sound={sound} />}
+      {sound.recipe && (sound.recipe.music ? <MusicSettings sound={sound} /> : <SynthSettings sound={sound} />)}
       <Waveform soundId={sound.id} buffer={sound.buffer} selection={sel} onSelect={setSel} />
       <div className="ed-info mono">
         {sound.buffer.duration.toFixed(2)} s · {(sound.buffer.sampleRate / 1000).toFixed(1)} kHz mono

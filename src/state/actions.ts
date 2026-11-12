@@ -133,7 +133,7 @@ export function addSound(name: string, buffer: AudioBuffer, recipe?: SynthRecipe
 
 /** Render a synth recipe, edits included. */
 export async function renderRecipe(r: SynthRecipe, sampleRate = audioCtx().sampleRate) {
-  let buf = await renderPreset(r.preset, r.dur, sampleRate, r.params, r.seed, r.speech);
+  let buf = await renderPreset(r.preset, r.dur, sampleRate, r.params, r.seed, r.speech, r.music);
   for (const e of r.edits) buf = await applyEdit(buf, e);
   return buf;
 }
@@ -143,6 +143,7 @@ export function makeRecipe(recipe: Omit<SynthRecipe, 'seed' | 'edits'> & Partial
   const r: SynthRecipe = { seed: newSeed(), edits: [], ...recipe };
   if (r.preset !== 'custom') delete r.params;
   if (!PRESETS[r.preset]?.speech || !r.speech?.text.trim()) delete r.speech;
+  if (!PRESETS[r.preset]?.music) delete r.music;
   return r;
 }
 

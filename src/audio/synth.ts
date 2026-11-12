@@ -2,6 +2,8 @@
 import { fromData, normalize, loopCrossfade, edgeFade } from './buffers';
 import { TAU } from './util';
 import { renderSpeech, type SpeechParams } from './speech';
+import { renderMusicAsync } from './music/client';
+import type { MusicParams } from './music/types';
 
 /** Random source for the generators. `renderPreset` swaps in a seeded one so a render can be repeated exactly. */
 let random = Math.random;
@@ -213,6 +215,8 @@ export interface Preset {
   js?: (sr: number, dur: number, len: number) => Float32Array;
   /** Speaks text instead, when the recipe has some. */
   speech?: boolean;
+  /** Algorithmic composition, rendered from the recipe's `music` settings (see ./music). */
+  music?: boolean;
 }
 
 export const PRESETS: Record<string, Preset> = {
@@ -518,6 +522,7 @@ export const PRESETS: Record<string, Preset> = {
     },
   },
   custom: { label: 'Custom synth…', dur: 2, render: renderCustom },
+  music: { label: 'Algorithmic music', dur: 60, music: true },
 };
 
 /**
@@ -526,10 +531,17 @@ export const PRESETS: Record<string, Preset> = {
  */
 export async function renderPreset(
   key: string, dur: number, sampleRate: number, params: CustomParams = customDefaults(), seed?: number,
-  speech?: SpeechParams,
+  speech?: SpeechParams, music?: MusicParams,
 ) {
   const p = PRESETS[key];
   if (!p) throw new Error(`Unknown preset “${key}”`);
+  if (p.music) {
+    // Already loopable (tails wrap around) and normalized at the level of the whole mix, so a stem
+    // keeps its balance with the other stems. Rendered at its own sample rate.
+    if (!music) throw new Error('Missing music settings');
+    const res = await renderMusicAsync(music, seed ?? 0, music.stem ? 'stem' : 'mix');
+    return fromData((music.stem ? res.stems[music.stem] : res.mix)!, res.sampleRate);
+  }
   const len = Math.max(1, Math.ceil(dur * sampleRate));
   let data: Float32Array | undefined;
   let ctx: OfflineAudioContext | undefined;
