@@ -1,4 +1,4 @@
-import { audioCtx, ensureRunning } from './context';
+import { audioCtx, ensureRunning, setAudioSession } from './context';
 
 /** Microphone capture via MediaRecorder, decoded into an AudioBuffer. */
 export class MicRecorder {
@@ -16,9 +16,15 @@ export class MicRecorder {
 
   async start(raw: boolean) {
     const ctx = await ensureRunning();
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: !raw, noiseSuppression: !raw, autoGainControl: !raw, channelCount: 1 },
-    });
+    setAudioSession('play-and-record');
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: !raw, noiseSuppression: !raw, autoGainControl: !raw, channelCount: 1 },
+      });
+    } catch (e) {
+      setAudioSession('playback');
+      throw e;
+    }
     this.chunks = [];
     this.rec = new MediaRecorder(this.stream);
     this.rec.ondataavailable = (e) => {
@@ -71,5 +77,6 @@ export class MicRecorder {
     this.rec = null;
     this.source = null;
     this.analyser = null;
+    setAudioSession('playback');
   }
 }
