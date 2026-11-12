@@ -1,13 +1,12 @@
 // All state mutations. Components call these; the engine and autosave react to the store.
 import { store } from './store';
-import { loadAll, startAutosave } from './persist';
 import { audioCtx } from '../audio/context';
-import { fromData, toMono } from '../audio/buffers';
-import { renderPreset } from '../audio/synth';
+import { applyEdit, toMono } from '../audio/buffers';
+import { newSeed, renderPreset } from '../audio/synth';
 import { ENVIRONMENTS } from '../audio/reverb';
 import { DEG, uid } from '../audio/util';
-import { defaultScene, hydrateScene, newSource } from '../scene/scene';
-import type { MotionType, Physics, Scene, Sound, Source, Vec3 } from '../scene/types';
+import { defaultScene, newSource } from '../scene/scene';
+import type { EditOp, MotionType, Physics, Scene, Sound, Source, SynthRecipe, Vec3 } from '../scene/types';
 
 // ---------------------------------------------------------------- misc
 
@@ -117,7 +116,8 @@ export function removeSource(id: string) {
 
 // ---------------------------------------------------------------- sounds
 
-const undoStacks = new Map<string, AudioBuffer[]>();
+/** Earlier versions of a sound, for undo. */
+const undoStacks = new Map<string, Pick<Sound, 'buffer' | 'recipe'>[]>();
 
 function uniqueName(name: string) {
   const names = new Set(store.get().sounds.map((s) => s.name));
@@ -125,10 +125,24 @@ function uniqueName(name: string) {
   for (let i = 2; ; i++) if (!names.has(`${name} ${i}`)) return `${name} ${i}`;
 }
 
-export function addSound(name: string, buffer: AudioBuffer): Sound {
-  const sound: Sound = { id: uid(), name: uniqueName(name), buffer: toMono(buffer), version: 1, created: Date.now() };
+export function addSound(name: string, buffer: AudioBuffer, recipe?: SynthRecipe): Sound {
+  const sound: Sound = { id: uid(), name: uniqueName(name), buffer: toMono(buffer), version: 1, created: Date.now(), recipe };
   store.set((s) => ({ sounds: [...s.sounds, sound], selectedSoundId: sound.id }));
   return sound;
+}
+
+/** Render a synth recipe, edits included. */
+export async function renderRecipe(r: SynthRecipe, sampleRate = audioCtx().sampleRate) {
+  let buf = await renderPreset(r.preset, r.dur, sampleRate, r.params, r.seed);
+  for (const e of r.edits) buf = await applyEdit(buf, e);
+  return buf;
+}
+
+/** Synthesize a new sound (with a fresh random seed unless one is given) and add it to the library. */
+export async function synthSound(name: string, recipe: Omit<SynthRecipe, 'seed' | 'edits'> & Partial<SynthRecipe>) {
+  const r: SynthRecipe = { seed: newSeed(), edits: [], ...recipe };
+  if (r.preset !== 'custom') delete r.params;
+  return addSound(name, await renderRecipe(r), r);
 }
 
 export function selectSound(id: string | null) {
@@ -139,17 +153,18 @@ export function renameSound(id: string, name: string) {
   store.set((s) => ({ sounds: s.sounds.map((x) => (x.id === id ? { ...x, name } : x)) }));
 }
 
-/** Replace a sound's buffer with an edited version (undoable). */
-export async function editSound(id: string, fn: (buf: AudioBuffer) => AudioBuffer | Promise<AudioBuffer>) {
+/** Edit a sound (undoable). Synthesized sounds remember the edit in their recipe. */
+export async function editSound(id: string, op: EditOp) {
   const sound = getSound(id);
   if (!sound) return;
-  const next = await fn(sound.buffer);
+  const next = await applyEdit(sound.buffer, op);
   if (next === sound.buffer) return;
   const stack = undoStacks.get(id) ?? [];
-  stack.push(sound.buffer);
+  stack.push({ buffer: sound.buffer, recipe: sound.recipe });
   if (stack.length > 20) stack.shift();
   undoStacks.set(id, stack);
-  store.set((s) => ({ sounds: s.sounds.map((x) => (x.id === id ? { ...x, buffer: next, version: x.version + 1 } : x)) }));
+  const recipe = sound.recipe && { ...sound.recipe, edits: [...sound.recipe.edits, op] };
+  store.set((s) => ({ sounds: s.sounds.map((x) => (x.id === id ? { ...x, buffer: next, recipe, version: x.version + 1 } : x)) }));
 }
 
 export const canUndo = (id: string) => (undoStacks.get(id)?.length ?? 0) > 0;
@@ -157,7 +172,7 @@ export const canUndo = (id: string) => (undoStacks.get(id)?.length ?? 0) > 0;
 export function undoSound(id: string) {
   const prev = undoStacks.get(id)?.pop();
   if (!prev) return;
-  store.set((s) => ({ sounds: s.sounds.map((x) => (x.id === id ? { ...x, buffer: prev, version: x.version + 1 } : x)) }));
+  store.set((s) => ({ sounds: s.sounds.map((x) => (x.id === id ? { ...x, ...prev, version: x.version + 1 } : x)) }));
 }
 
 export function deleteSound(id: string) {
@@ -169,7 +184,7 @@ export function deleteSound(id: string) {
   }));
 }
 
-// ---------------------------------------------------------------- boot
+// ---------------------------------------------------------------- demo
 
 /** Set a source's motion type and override some of that type's parameters. */
 function setMotion(id: string, type: MotionType, params: Record<string, number>) {
@@ -179,11 +194,10 @@ function setMotion(id: string, type: MotionType, params: Record<string, number>)
 }
 
 /** Demo: a cathedral with someone walking around, a bee darting about, and an ambulance passing behind. */
-async function createDemo() {
-  const sr = audioCtx().sampleRate;
-  const bee = addSound('Bee', await renderPreset('bee', 6, sr));
-  const siren = addSound('Siren', await renderPreset('siren', 6, sr));
-  const steps = addSound('Footsteps', await renderPreset('footsteps', 6, sr));
+export async function createDemo() {
+  const bee = await synthSound('Bee', { preset: 'bee', dur: 6 });
+  const siren = await synthSound('Siren', { preset: 'siren', dur: 6 });
+  const steps = await synthSound('Footsteps', { preset: 'footsteps', dur: 6 });
 
   updateScene(() => ({ environment: { preset: 'cathedral', wet: ENVIRONMENTS.cathedral.wet } }));
 
@@ -201,24 +215,6 @@ async function createDemo() {
 
   selectSource(f.id);
   selectSound(steps.id);
-  updateScene((s) => ({ view: { ...s.view, scale: 18 } }));
-}
-
-export async function boot() {
-  const saved = await loadAll();
-  if (saved && saved.sounds.length) {
-    const sounds: Sound[] = saved.sounds.map((r) => ({
-      id: r.id, name: r.name, buffer: fromData(r.data, r.sampleRate), version: 1, created: r.created,
-    }));
-    const scene = hydrateScene(saved.scene);
-    store.set({ sounds, scene, selectedSoundId: sounds[0].id, selectedSourceId: scene.sources[0]?.id ?? null });
-    startAutosave(true);
-  } else {
-    store.set({ scene: defaultScene() });
-    await createDemo();
-    startAutosave(false);
-  }
-  store.set({ ready: true });
 }
 
 export async function resetToDemo() {

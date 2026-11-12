@@ -13,6 +13,10 @@ export interface AppState {
   playing: boolean;
   rightTab: 'source' | 'world';
   toast: { id: number; msg: string; kind: 'info' | 'error' } | null;
+  /** Which top-bar popover is open (only one at a time). */
+  popover: 'share' | 'setups' | null;
+  /** Name of the saved setup last saved or loaded, offered again when saving. */
+  setupName: string | null;
 }
 
 let state: AppState = {
@@ -24,6 +28,8 @@ let state: AppState = {
   playing: false,
   rightTab: 'source',
   toast: null,
+  popover: null,
+  setupName: null,
 };
 
 const listeners = new Set<() => void>();

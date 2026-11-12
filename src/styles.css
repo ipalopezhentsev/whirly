@@ -113,6 +113,20 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 0 4px; border: 1px sol
 .rp-head { display: flex; align-items: center; gap: 8px; }
 .rp-head .icon { margin-left: auto; }
 .render-pop audio { width: 100%; }
+.share-pop { width: 380px; }
+.share-pop .hint { margin: 0; }
+.share-pop .hint.warn { color: var(--warn); }
+.share-url { width: 100%; font-size: 11px; }
+.setups-pop { width: 360px; }
+.setup-save { display: flex; gap: 6px; }
+.setup-save input { flex: 1; min-width: 0; }
+.setup-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 50vh; overflow: auto; }
+.setup-list li { display: flex; align-items: center; gap: 4px; border-radius: 6px; }
+.setup-list li.on { background: var(--bg); box-shadow: inset 2px 0 0 var(--accent); }
+.setup-open { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; text-align: left; background: none; border-color: transparent; }
+.setup-open:hover { background: var(--bg); }
+.setup-open .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setup-open .meta { color: var(--muted); font-size: 11px; white-space: nowrap; }
 
 /* ---------------------------------------------------------------- layout */
 
@@ -211,11 +225,7 @@ details[open] { display: grid; gap: 7px; }
 
 /* ---------------------------------------------------------------- scene */
 
-.view-bar { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
-.view-bar .seg { width: 260px; }
 .views { flex: 1; min-height: 0; display: grid; }
-.views.split { grid-template-columns: 1fr 1fr; }
-.views.split > .scene-wrap + .scene-wrap { border-left: 1px solid var(--line); }
 
 .scene-wrap { position: relative; flex: 1; min-height: 240px; overflow: hidden; }
 .three-canvas { position: absolute; inset: 0; display: block; touch-action: none; }
@@ -227,7 +237,6 @@ details[open] { display: grid; gap: 7px; }
 .lbl3d.src small { color: var(--muted); font-family: var(--mono); font-size: 10px; }
 .lbl3d.src.sel span { font-weight: 700; }
 .lbl3d.you { color: var(--accent, #4fd1c5); font-family: var(--mono); font-size: 10px; padding-right: 14px; }
-.scene-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
 .scene-tag, .scene-help, .scene-zoom { position: absolute; font-size: 11px; color: var(--muted); }
 .scene-tag { top: 10px; left: 12px; }
 .scene-help { bottom: 10px; left: 12px; right: 12px; pointer-events: none; }
@@ -298,8 +307,6 @@ details[open] { display: grid; gap: 7px; }
   #root { height: auto; min-height: 100%; }
   .layout { grid-template-columns: 1fr; }
   .stage { order: -1; height: 80vh; }
-  .views.split { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
-  .views.split > .scene-wrap + .scene-wrap { border-left: none; border-top: 1px solid var(--line); }
   .panel { overflow: visible; border: none; border-top: 1px solid var(--line); }
   .phones { display: none; }
   .render-pop { right: 8px; left: 8px; width: auto; }

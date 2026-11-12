@@ -27,7 +27,6 @@ export function defaultScene(): Scene {
       floorAmount: 0.5,
       earHeight: 1.6,
     },
-    view: { scale: 28, mode: 'split' },
     sources: [],
   };
 }
@@ -65,9 +64,9 @@ export function hydrateScene(raw: any): Scene {
     listener: { ...d.listener, ...raw.listener },
     environment: { ...d.environment, ...raw.environment },
     physics: { ...d.physics, ...raw.physics },
-    view: { ...d.view, ...raw.view },
     sources: [],
   };
+  delete (s as any).view; // left over from saves made when there was a 2D top view
   if (!ENVIRONMENTS[s.environment.preset]) s.environment.preset = 'room';
   for (const src of raw.sources || []) {
     const base = newSource(s, src.soundId ?? null, src.pos);

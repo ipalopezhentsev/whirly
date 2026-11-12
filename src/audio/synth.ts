@@ -2,8 +2,24 @@
 import { fromData, normalize, loopCrossfade, edgeFade } from './buffers';
 import { TAU } from './util';
 
-const rand = (a: number, b: number) => a + Math.random() * (b - a);
-const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
+/** Random source for the generators. `renderPreset` swaps in a seeded one so a render can be repeated exactly. */
+let random = Math.random;
+
+/** Small seeded PRNG (mulberry32). */
+function seeded(seed: number) {
+  let a = seed | 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export const newSeed = () => (Math.random() * 2 ** 32) >>> 0;
+
+const rand = (a: number, b: number) => a + random() * (b - a);
+const pick = <T,>(arr: T[]) => arr[Math.floor(random() * arr.length)];
 
 export type NoiseColor = 'white' | 'pink' | 'brown';
 
@@ -13,7 +29,7 @@ export function noiseData(len: number, color: NoiseColor = 'white') {
     // Paul Kellet's refined pink-noise filter
     let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
     for (let i = 0; i < len; i++) {
-      const w = Math.random() * 2 - 1;
+      const w = random() * 2 - 1;
       b0 = 0.99886 * b0 + w * 0.0555179;
       b1 = 0.99332 * b1 + w * 0.0750759;
       b2 = 0.969 * b2 + w * 0.153852;
@@ -26,11 +42,11 @@ export function noiseData(len: number, color: NoiseColor = 'white') {
   } else if (color === 'brown') {
     let last = 0;
     for (let i = 0; i < len; i++) {
-      last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+      last = (last + 0.02 * (random() * 2 - 1)) / 1.02;
       d[i] = last * 3.5;
     }
   } else {
-    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    for (let i = 0; i < len; i++) d[i] = random() * 2 - 1;
   }
   return d;
 }
@@ -246,7 +262,7 @@ export const PRESETS: Record<string, Preset> = {
           const len = rand(0.05, 0.12);
           const lo = base * rand(0.8, 1.1);
           const hi = base * rand(1.2, 1.7);
-          const up = Math.random() < 0.5;
+          const up = random() < 0.5;
           o.frequency.setValueAtTime(up ? lo : hi, t);
           o.frequency.exponentialRampToValueAtTime(up ? hi : lo, t + len);
           g.gain.setValueAtTime(0, t);
@@ -299,7 +315,7 @@ export const PRESETS: Record<string, Preset> = {
         const t = i / sr;
         const ph = (t * slapRate) % 1;
         const slap = Math.exp(-ph * 14);
-        const w = Math.random() * 2 - 1;
+        const w = random() * 2 - 1;
         lp += 0.12 * (w - lp);
         br = (br + 0.02 * w) / 1.02;
         d[i] = 1.6 * lp * slap + 0.5 * Math.sin(TAU * 55 * t) * slap + br + 0.03 * Math.sin(TAU * 1150 * t);
@@ -352,13 +368,13 @@ export const PRESETS: Record<string, Preset> = {
       while (t < dur - 0.4) {
         const len = rand(0.12, 0.3);
         const v = pick(Object.keys(V));
-        if (Math.random() < 0.4) gate(ng.gain, t - 0.07, 0.01, 0.04, 0.02, 0.25);
+        if (random() < 0.4) gate(ng.gain, t - 0.07, 0.01, 0.04, 0.02, 0.25);
         formants.forEach((f, k) => f.frequency.setTargetAtTime(V[v][k], t, 0.02));
         src.frequency.setTargetAtTime(rand(105, 150), t, 0.06);
         amp.gain.setTargetAtTime(1, t, 0.02);
         amp.gain.setTargetAtTime(0, t + len, 0.03);
         t += len + rand(0.06, 0.14);
-        if (++inPhrase > 3 + Math.random() * 5) {
+        if (++inPhrase > 3 + random() * 5) {
           inPhrase = 0;
           t += rand(0.35, 0.8);
         }
@@ -399,7 +415,7 @@ export const PRESETS: Record<string, Preset> = {
       const drops = Math.floor(dur * 90);
       const L = Math.floor(sr * 0.02);
       for (let k = 0; k < drops; k++) {
-        const start = Math.floor(Math.random() * len);
+        const start = Math.floor(random() * len);
         const f = rand(1500, 6000);
         const a = rand(0.05, 0.4) ** 2 * 2;
         const decay = rand(0.002, 0.006);
@@ -437,7 +453,7 @@ export const PRESETS: Record<string, Preset> = {
         const n = Math.floor(0.03 * sr);
         for (let j = 0; j < n && s + j < len; j++) {
           const tt = j / sr;
-          d[s + j] += (Math.sin(TAU * f * tt) * 0.8 + (Math.random() * 2 - 1) * 0.3) * Math.exp(-tt / 0.004);
+          d[s + j] += (Math.sin(TAU * f * tt) * 0.8 + (random() * 2 - 1) * 0.3) * Math.exp(-tt / 0.004);
         }
       }
       return d;
@@ -446,20 +462,35 @@ export const PRESETS: Record<string, Preset> = {
   custom: { label: 'Custom synth…', dur: 2, render: renderCustom },
 };
 
-/** Render a preset to a normalized mono AudioBuffer. */
-export async function renderPreset(key: string, dur: number, sampleRate: number, params: CustomParams = customDefaults()) {
+/**
+ * Render a preset to a normalized mono AudioBuffer. With a `seed`, the same arguments give the
+ * same sound every time (that is how share links rebuild synthesized sounds).
+ */
+export async function renderPreset(
+  key: string, dur: number, sampleRate: number, params: CustomParams = customDefaults(), seed?: number,
+) {
   const p = PRESETS[key];
+  if (!p) throw new Error(`Unknown preset “${key}”`);
   const len = Math.max(1, Math.ceil(dur * sampleRate));
-  let data: Float32Array;
-  if (p.js) {
-    data = p.js(sampleRate, dur, len);
-  } else {
-    const ctx = new OfflineAudioContext(1, len, sampleRate);
-    const out = new GainNode(ctx);
-    out.connect(ctx.destination);
-    p.render!(ctx, out, dur, params);
-    data = (await ctx.startRendering()).getChannelData(0);
+  let data: Float32Array | undefined;
+  let ctx: OfflineAudioContext | undefined;
+  // All random numbers are drawn synchronously here, before the first await, so concurrent
+  // renders can't interleave their draws.
+  const prev = random;
+  if (seed !== undefined) random = seeded(seed);
+  try {
+    if (p.js) {
+      data = p.js(sampleRate, dur, len);
+    } else {
+      ctx = new OfflineAudioContext(1, len, sampleRate);
+      const out = new GainNode(ctx);
+      out.connect(ctx.destination);
+      p.render!(ctx, out, dur, params);
+    }
+  } finally {
+    random = prev;
   }
+  data ??= (await ctx!.startRendering()).getChannelData(0);
   let buf = fromData(data, sampleRate);
   buf = p.loop && dur > 0.5 ? loopCrossfade(buf, Math.min(0.1, dur * 0.1)) : edgeFade(buf);
   return normalize(buf, -3);

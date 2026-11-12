@@ -1,7 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
-import { boot, toast } from './state/actions';
+import { toast } from './state/actions';
+import { boot } from './state/boot';
 import { store } from './state/store';
 import { engine } from './audio/engine';
 import './styles.css';

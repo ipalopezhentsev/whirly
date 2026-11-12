@@ -1,6 +1,6 @@
 // Autosave the scene and the sound library to IndexedDB so work survives a reload.
 import { store } from './store';
-import type { Sound } from '../scene/types';
+import type { Sound, SynthRecipe } from '../scene/types';
 
 const DB_NAME = 'whirly';
 
@@ -10,16 +10,20 @@ interface StoredSound {
   sampleRate: number;
   created: number;
   data: Float32Array;
+  recipe?: SynthRecipe;
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
-function db() {
+export function db() {
   dbPromise ??= new Promise((resolve, reject) => {
-    const r = indexedDB.open(DB_NAME, 1);
+    // v2 adds saved setups ('setups') and their audio, stored once per distinct sound ('audio').
+    const r = indexedDB.open(DB_NAME, 2);
     r.onupgradeneeded = () => {
-      r.result.createObjectStore('sounds', { keyPath: 'id' });
-      r.result.createObjectStore('kv');
+      const d = r.result;
+      for (const [name, keyPath] of [['sounds', 'id'], ['kv', null], ['setups', 'id'], ['audio', 'fp']] as const) {
+        if (!d.objectStoreNames.contains(name)) d.createObjectStore(name, keyPath ? { keyPath } : undefined);
+      }
     };
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);
@@ -27,14 +31,14 @@ function db() {
   return dbPromise;
 }
 
-function req<T>(r: IDBRequest<T>) {
+export function req<T>(r: IDBRequest<T>) {
   return new Promise<T>((resolve, reject) => {
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);
   });
 }
 
-async function tx(storeName: string, mode: IDBTransactionMode) {
+export async function tx(storeName: string, mode: IDBTransactionMode) {
   return (await db()).transaction(storeName, mode).objectStore(storeName);
 }
 
@@ -57,6 +61,7 @@ async function saveSound(s: Sound) {
     sampleRate: s.buffer.sampleRate,
     created: s.created,
     data: s.buffer.getChannelData(0).slice(),
+    recipe: s.recipe,
   };
   await req((await tx('sounds', 'readwrite')).put(rec));
 }
@@ -77,21 +82,31 @@ export async function clearAll() {
 export function startAutosave(persisted: boolean) {
   let last = store.get();
   let sceneTimer = 0;
+  let pendingScene: unknown = null;
   const saved = new Map<string, Sound>(persisted ? last.sounds.map((s) => [s.id, s]) : []);
   const fail = (e: unknown) => console.warn('Autosave failed', e);
+
+  const writeScene = async () => {
+    clearTimeout(sceneTimer);
+    const scene = pendingScene;
+    pendingScene = null;
+    if (!scene) return;
+    try {
+      await req((await tx('kv', 'readwrite')).put(scene, 'scene'));
+    } catch (e) {
+      fail(e);
+    }
+  };
+  // Don't lose the last change when the page is reloaded or closed within the debounce window.
+  window.addEventListener('pagehide', writeScene);
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && writeScene());
 
   const sync = (force = false) => {
     const s = store.get();
     if (force || s.scene !== last.scene) {
       clearTimeout(sceneTimer);
-      const scene = s.scene;
-      sceneTimer = window.setTimeout(async () => {
-        try {
-          await req((await tx('kv', 'readwrite')).put(scene, 'scene'));
-        } catch (e) {
-          fail(e);
-        }
-      }, 400);
+      pendingScene = s.scene;
+      sceneTimer = window.setTimeout(writeScene, 400);
     }
     if (force || s.sounds !== last.sounds) {
       const ids = new Set(s.sounds.map((x) => x.id));

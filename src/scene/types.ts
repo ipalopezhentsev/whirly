@@ -1,3 +1,5 @@
+import type { CustomParams } from '../audio/synth';
+
 export interface Vec3 {
   x: number;
   y: number;
@@ -60,16 +62,35 @@ export interface Physics {
   earHeight: number;
 }
 
-export type ViewMode = 'top' | '3d' | 'split';
-
 export interface Scene {
   version: number;
   masterDb: number;
   listener: { yaw: number; spin: number };
   environment: { preset: string; wet: number };
   physics: Physics;
-  view: { scale: number; mode: ViewMode };
   sources: Source[];
+}
+
+export type EditKind =
+  | 'crop' | 'delete' | 'silence' | 'reverse' | 'normalize' | 'fadeIn' | 'fadeOut' | 'gain' | 'trim' | 'loopFade' | 'speed';
+
+/** One sound edit, as data, so it can be replayed (see `applyEdit`). */
+export interface EditOp {
+  op: EditKind;
+  sel?: Selection | null;
+  /** Amount, for gain (dB) and speed (×). */
+  v?: number;
+}
+
+/** How to regenerate a synthesized sound exactly: share links carry this instead of the audio. */
+export interface SynthRecipe {
+  preset: string;
+  dur: number;
+  /** Seed for the synth's random generator (noise, random rhythms). */
+  seed: number;
+  /** Custom-synth settings (only for the 'custom' preset). */
+  params?: CustomParams;
+  edits: EditOp[];
 }
 
 export interface Sound {
@@ -79,6 +100,8 @@ export interface Sound {
   buffer: AudioBuffer;
   version: number;
   created: number;
+  /** Set for synthesized sounds; recorded and imported sounds have none. */
+  recipe?: SynthRecipe;
 }
 
 export interface Selection {

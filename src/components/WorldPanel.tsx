@@ -19,7 +19,7 @@ export function WorldPanel() {
         <Slider label="Spin" value={listener.spin} min={-180} max={180} step={1} unit="°/s"
           title="Continuously turn the listener's head while playing"
           onChange={(spin) => updateScene((s) => ({ listener: { ...s.listener, spin } }))} />
-        <Hint>You can also drag the head in the top view, or press <kbd>Q</kbd> / <kbd>E</kbd>.</Hint>
+        <Hint>You can also press <kbd>Q</kbd> / <kbd>E</kbd> to turn.</Hint>
         <Slider label="Height" value={ph.earHeight} min={0.1} max={100} log step={0.01} unit="m" hardMax={1000}
           title="Listener's ears above the floor" onChange={setListenerHeight} />
         <div className="chips">

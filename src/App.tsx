@@ -8,9 +8,9 @@ import { renderScene } from './audio/spatial';
 import { downloadBlob, encodeWav } from './audio/wav';
 import { fmtTime, wrapDeg } from './audio/util';
 import { SoundsPanel } from './components/SoundsPanel';
-import { SceneCanvas } from './components/SceneCanvas';
 import { ThreeView } from './components/ThreeView';
-import type { ViewMode } from './scene/types';
+import { ShareButton } from './components/ShareButton';
+import { SetupsButton } from './components/SetupsButton';
 import { Monitor } from './components/Monitor';
 import { Inspector } from './components/Inspector';
 import { WorldPanel } from './components/WorldPanel';
@@ -21,14 +21,16 @@ export function App() {
   const tab = useApp((s) => s.rightTab);
   useShortcuts();
 
-  if (!ready) return <div className="loading">Synthesizing demo sounds…</div>;
+  if (!ready) return <div className="loading">Synthesizing sounds…</div>;
   return (
     <>
       <Transport />
       <main className="layout">
         <SoundsPanel />
         <section className="stage">
-          <Views />
+          <div className="views">
+            <ThreeView />
+          </div>
           <Monitor />
         </section>
         <aside className="panel right">
@@ -37,22 +39,6 @@ export function App() {
         </aside>
       </main>
       <Toast />
-    </>
-  );
-}
-
-function Views() {
-  const mode = useApp((s) => s.scene.view.mode);
-  return (
-    <>
-      <div className="view-bar">
-        <Seg<ViewMode> value={mode} onChange={(m) => updateScene((s) => ({ view: { ...s.view, mode: m } }))}
-          options={[['top', 'Top'], ['split', 'Top + 3D'], ['3d', '3D']]} />
-      </div>
-      <div className={`views ${mode}`}>
-        {mode !== '3d' && <SceneCanvas />}
-        {mode !== 'top' && <ThreeView />}
-      </div>
     </>
   );
 }
@@ -115,6 +101,9 @@ function Transport() {
           <span>s</span>
         </label>
         <button onClick={exportWav} disabled={rendering}>{rendering ? 'Rendering…' : '⬇ Render WAV'}</button>
+        <span className="sep" />
+        <SetupsButton />
+        <ShareButton />
       </div>
       <div className="phones" title="HRTF spatialization only works properly on headphones">🎧 Use headphones</div>
       {result && (

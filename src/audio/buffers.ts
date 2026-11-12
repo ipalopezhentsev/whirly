@@ -1,5 +1,5 @@
 // Edit operations on mono AudioBuffers. Every function returns a new buffer.
-import type { Selection } from '../scene/types';
+import type { EditOp, Selection } from '../scene/types';
 import { clamp, dbToGain } from './util';
 
 export function makeBuffer(length: number, sampleRate: number, channels = 1) {
@@ -158,4 +158,22 @@ export async function changeSpeed(buf: AudioBuffer, rate: number) {
   s.connect(ctx.destination);
   s.start();
   return ctx.startRendering();
+}
+
+/** Apply one recorded edit. */
+export function applyEdit(buf: AudioBuffer, e: EditOp): AudioBuffer | Promise<AudioBuffer> {
+  switch (e.op) {
+    case 'crop': return crop(buf, e.sel);
+    case 'delete': return removeRange(buf, e.sel);
+    case 'silence': return silence(buf, e.sel);
+    case 'reverse': return reverse(buf, e.sel);
+    case 'normalize': return normalize(buf, -1);
+    case 'fadeIn': return fadeIn(buf, e.sel);
+    case 'fadeOut': return fadeOut(buf, e.sel);
+    case 'gain': return applyGain(buf, e.v ?? 0, e.sel);
+    case 'trim': return trimSilence(buf);
+    case 'loopFade': return loopCrossfade(buf, 0.08);
+    case 'speed': return changeSpeed(buf, e.v ?? 1);
+    default: throw new Error(`Unknown edit “${(e as EditOp).op}”`);
+  }
 }

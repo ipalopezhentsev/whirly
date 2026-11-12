@@ -2,18 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/store';
 import { useFrame } from '../state/frame';
 import {
-  addSound, addSource, canUndo, deleteSound, editSound, renameSound, selectSound, toast, undoSound,
+  addSound, addSource, canUndo, deleteSound, editSound, renameSound, selectSound, synthSound, toast, undoSound,
 } from '../state/actions';
 import { audioCtx, ensureRunning } from '../audio/context';
 import { engine } from '../audio/engine';
 import { MicRecorder } from '../audio/recorder';
-import { CUSTOM_NUMBERS, CUSTOM_SELECTS, customDefaults, PRESETS, renderPreset, type CustomParams } from '../audio/synth';
+import { CUSTOM_NUMBERS, CUSTOM_SELECTS, customDefaults, PRESETS, type CustomParams } from '../audio/synth';
 import * as ed from '../audio/buffers';
 import { downloadBlob, encodeWav, safeFileName } from '../audio/wav';
 import { fmtTime } from '../audio/util';
 import { Check, Hint, Select, Seg, Slider } from './controls';
 import { Waveform } from './Waveform';
-import type { Selection, Sound } from '../scene/types';
+import type { EditKind, Selection, Sound } from '../scene/types';
 
 export function SoundsPanel() {
   const [tab, setTab] = useState<'synth' | 'record' | 'file'>('synth');
@@ -43,8 +43,7 @@ function SynthCreator() {
   const generate = async () => {
     setBusy(true);
     try {
-      const buf = await renderPreset(preset, dur, audioCtx().sampleRate, params);
-      const s = addSound(PRESETS[preset].label.replace(/[(…].*$/, '').trim(), buf);
+      const s = await synthSound(PRESETS[preset].label.replace(/[(…].*$/, '').trim(), { preset, dur, params });
       engine.previewSound(s, null);
     } catch (e) {
       toast(`Could not generate: ${(e as Error).message}`, 'error');
@@ -219,11 +218,13 @@ function EditorFor({ sound }: { sound: Sound }) {
   const [rate, setRate] = useState(1);
   const [busy, setBusy] = useState(false);
 
-  const run = async (fn: (b: AudioBuffer) => AudioBuffer | Promise<AudioBuffer>, keepSel = false) => {
+  // Edits are data (EditOp), so synthesized sounds can record them in their recipe for share links.
+  const run = async (op: EditKind, { useSel = false, keepSel = false, v }: { useSel?: boolean; keepSel?: boolean; v?: number } = {}) => {
     setBusy(true);
     try {
       engine.stopPreview();
-      await editSound(sound.id, fn);
+      const s = useSel && sel ? { start: +sel.start.toFixed(4), end: +sel.end.toFixed(4) } : undefined;
+      await editSound(sound.id, { op, ...(s && { sel: s }), ...(v !== undefined && { v }) });
       if (!keepSel) setSel(null);
     } finally {
       setBusy(false);
@@ -231,17 +232,17 @@ function EditorFor({ sound }: { sound: Sound }) {
   };
 
   const ops: [string, string, () => void][] = [
-    ['Crop', 'Keep only the selection', () => run((b) => ed.crop(b, sel))],
-    ['Delete', 'Remove the selection', () => run((b) => ed.removeRange(b, sel))],
-    ['Silence', 'Silence the selection', () => run((b) => ed.silence(b, sel), true)],
-    ['Reverse', 'Reverse (selection or all)', () => run((b) => ed.reverse(b, sel), true)],
-    ['Normalize', 'Peak to −1 dBFS', () => run((b) => ed.normalize(b, -1), true)],
-    ['Fade in', 'Fade in over selection (or start)', () => run((b) => ed.fadeIn(b, sel), true)],
-    ['Fade out', 'Fade out over selection (or end)', () => run((b) => ed.fadeOut(b, sel), true)],
-    ['−3 dB', 'Quieter (selection or all)', () => run((b) => ed.applyGain(b, -3, sel), true)],
-    ['+3 dB', 'Louder (selection or all)', () => run((b) => ed.applyGain(b, 3, sel), true)],
-    ['Trim', 'Cut silence at both ends', () => run((b) => ed.trimSilence(b))],
-    ['Loop x-fade', 'Cross-fade the end into the start so the sound loops seamlessly', () => run((b) => ed.loopCrossfade(b, 0.08))],
+    ['Crop', 'Keep only the selection', () => run('crop', { useSel: true })],
+    ['Delete', 'Remove the selection', () => run('delete', { useSel: true })],
+    ['Silence', 'Silence the selection', () => run('silence', { useSel: true, keepSel: true })],
+    ['Reverse', 'Reverse (selection or all)', () => run('reverse', { useSel: true, keepSel: true })],
+    ['Normalize', 'Peak to −1 dBFS', () => run('normalize', { keepSel: true })],
+    ['Fade in', 'Fade in over selection (or start)', () => run('fadeIn', { useSel: true, keepSel: true })],
+    ['Fade out', 'Fade out over selection (or end)', () => run('fadeOut', { useSel: true, keepSel: true })],
+    ['−3 dB', 'Quieter (selection or all)', () => run('gain', { useSel: true, keepSel: true, v: -3 })],
+    ['+3 dB', 'Louder (selection or all)', () => run('gain', { useSel: true, keepSel: true, v: 3 })],
+    ['Trim', 'Cut silence at both ends', () => run('trim')],
+    ['Loop x-fade', 'Cross-fade the end into the start so the sound loops seamlessly', () => run('loopFade')],
   ];
 
   return (
@@ -271,7 +272,7 @@ function EditorFor({ sound }: { sound: Sound }) {
       <div className="speed">
         <Slider label="Speed" value={rate} min={0.25} max={4} step={0.01} unit="×" onChange={setRate}
           title="Changes speed and pitch together, like tape" />
-        <button disabled={busy || rate === 1} onClick={() => run((b) => ed.changeSpeed(b, rate)).then(() => setRate(1))}>
+        <button disabled={busy || rate === 1} onClick={() => run('speed', { v: rate }).then(() => setRate(1))}>
           Apply speed ×{rate.toFixed(2)}
         </button>
       </div>

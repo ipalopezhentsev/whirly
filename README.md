@@ -18,9 +18,11 @@ Use headphones — the HRTF panner only works properly over headphones.
 - *Import* any audio file the browser can decode. Everything is mixed to mono — sources are point sources.
 - *Edit*: select on the waveform, then crop / delete / silence / reverse / normalize / fade / gain / trim silence / seamless-loop cross-fade / speed change, with undo. Download any sound as WAV.
 
-**Scene** (centre) — *Top*, *3D* or both side by side.
-- Top view: front is up. Drag sources, drag the head to turn it, double-click to add a source, scroll to zoom.
-- 3D view (three.js): orbit/pan/zoom the camera. Every source has a stem down to the floor and a floor shadow, so height is visible at a glance. Drag a ball to move it, drag the white ⇕ handle on the selected source to change its height.
+**Scene** (centre) — a 3D view (three.js): orbit/pan/zoom the camera. Every source has a stem down to the floor and a floor shadow, so height is visible at a glance. Drag a ball to move it, drag the white ⇕ handle on the selected source to change its height, double-click the floor to add a source.
+
+**Setups** — *💾 Setups* saves the current scene under a name in this browser (IndexedDB) and lists saved setups to open again. Each setup keeps its sounds at full quality, so it still opens after those sounds are deleted from the library; audio shared by several setups is stored once.
+
+**Share** — *🔗 Share* copies a link that holds the whole scene. Synthesized sounds travel as their recipe (preset, settings, random seed and edits), so the link stays short; recorded or imported sounds are embedded as compressed audio, which makes the link much longer.
 
 **Source** (right panel) — position (polar or cartesian; height is measured from the listener's ears), motion path (orbit around listener, approach & recede, fly-by back & forth, one-way drive-past, circle, rise & fall, wander), directivity cone, gain/mute/solo, and live readouts: distance, direction, elevation, arrival delay, Doppler shift, distance loss, air low-pass.
 
