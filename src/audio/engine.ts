@@ -3,7 +3,7 @@
 import { audioCtx, ensureRunning } from './context';
 import {
   anySolo, applyPannerProps, applyState, buildOutput, computeState, createChain, listenerYaw,
-  setEnvironment, setListener, startCue, startPlayer, type Chain, type Output,
+  playPositions, setEnvironment, setListener, startCue, startPlayer, type Chain, type Output,
 } from './spatial';
 import { dbToGain } from './util';
 import { store } from '../state/store';
@@ -265,6 +265,25 @@ class Engine {
       /* already stopped */
     }
     this.preview = null;
+  }
+
+  /**
+   * Where the given sounds are playing right now (seconds into the sound): each scene source
+   * playing one of them (as heard at the listener), plus the preview. Muted sources don't count.
+   */
+  playheads(soundIds: ReadonlySet<string>) {
+    const out: number[] = [];
+    if (this.preview && soundIds.has(this.preview.soundId)) out.push(this.preview.offset + this.ctx.currentTime - this.preview.startedAt);
+    if (!this.playing) return out;
+    const { scene } = store.get();
+    const solo = anySolo(scene);
+    const now = this.ctx.currentTime;
+    for (const src of scene.sources) {
+      if (!src.soundId || !soundIds.has(src.soundId) || src.muted || (solo && !src.solo)) continue;
+      const ch = this.chains.get(src.id);
+      if (ch) out.push(...playPositions(ch, now));
+    }
+    return out;
   }
 
   /** Playhead (seconds into the sound) of the running preview, or null. */

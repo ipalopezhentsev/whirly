@@ -1,6 +1,7 @@
 // Algorithmic music: the "Compose" creator tab, and a piece's settings in its sound editor.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../state/store';
+import { useFrame } from '../state/frame';
 import { toast } from '../state/actions';
 import { composeBand, composeMix, pieceSettings, pieceSounds, rerenderPiece, splitIntoStems } from '../state/music';
 import { engine } from '../audio/engine';
@@ -74,6 +75,8 @@ export function MusicSettings({ sound }: { sound: Sound }) {
   const [busy, setBusy] = useState(false);
   const sounds = useApp((s) => s.sounds);
   const siblings = useMemo(() => pieceSounds(sound, sounds), [sound, sounds]);
+  // The mix and its stems run in sync, so any of them playing moves the playhead.
+  const soundIds = useMemo(() => new Set(siblings.map((s) => s.id)), [siblings]);
   const stemTrack = m.stem ? m.tracks.find((t) => t.id === m.stem) : undefined;
   const stemCount = siblings.filter((s) => s.recipe?.music?.stem).length;
   const changed = JSON.stringify(d) !== JSON.stringify(strip(m));
@@ -131,7 +134,7 @@ export function MusicSettings({ sound }: { sound: Sound }) {
         {' '}{d.bars} bars ({fmtTime(musicDuration(d)).replace(/\.\d$/, '')})
         <div className="chords">{chordLine}</div>
       </div>
-      <ArrangementMap p={d} seed={r.seed} plan={plan} />
+      <ArrangementMap p={d} seed={r.seed} plan={plan} live={changed ? null : { soundIds, barSec: barSeconds(m) }} />
 
       <div className="gen-btns">
         <button className="primary" onClick={() => apply()} disabled={busy || !changed}
@@ -213,15 +216,52 @@ function AddTrack({ onAdd }: { onAdd: (role: Role) => void }) {
 
 // ---------------------------------------------------------------- arrangement
 
-/** Sections across, parts down: where each part plays and how strongly; energy on top. */
-function ArrangementMap({ p, seed, plan }: { p: MusicParams; seed: number; plan: ReturnType<typeof makePlan> }) {
+/** At most this many playheads are drawn (one per scene source playing the piece, plus the preview). */
+const MAX_HEADS = 4;
+
+/**
+ * Sections across, parts down: where each part plays and how strongly; energy on top.
+ * With `live` (the settings shown are the ones rendered), a line marks where the piece is playing.
+ */
+function ArrangementMap({ p, seed, plan, live }: {
+  p: MusicParams; seed: number; plan: ReturnType<typeof makePlan>; live: { soundIds: ReadonlySet<string>; barSec: number } | null;
+}) {
   const cols = plan.sections.map((s) => `${s.bars}fr`).join(' ');
   const names: Record<string, string> = { intro: 'In', outro: 'Out' };
+  const root = useRef<HTMLDivElement>(null);
+  const energy = useRef<HTMLDivElement>(null);
+  const heads = useRef<(HTMLDivElement | null)[]>([]);
+
+  useFrame(() => {
+    // Stems of one piece play in step: show a single line for plays within 50 ms of each other.
+    const times = (live ? engine.playheads(live.soundIds) : []).sort((a, b) => a - b).filter((t, i, all) => !i || t - all[i - 1] > 0.05);
+    const box = root.current?.getBoundingClientRect();
+    heads.current.forEach((h, i) => {
+      if (!h) return;
+      const t = times[i];
+      const bar = live && t !== undefined ? t / live.barSec : -1;
+      // Position within the section's column (columns are separated by gaps, so not quite linear overall).
+      const k = plan.sections.findIndex((s) => bar < s.start + s.bars);
+      const cell = energy.current?.children[k] as HTMLElement | undefined;
+      if (bar < 0 || !box || !cell) {
+        h.style.display = 'none';
+        return;
+      }
+      const s = plan.sections[k];
+      const r = cell.getBoundingClientRect();
+      h.style.display = '';
+      h.style.transform = `translateX(${r.left - box.left + ((bar - s.start) / s.bars) * r.width}px)`;
+    });
+  });
+
   return (
-    <div className="arr" title="Arrangement: sections across, parts down. Brighter = plays more (denser, louder, more drum voices).">
+    <div className="arr" ref={root} title="Arrangement: sections across, parts down. Brighter = plays more (denser, louder, more drum voices).">
+      {Array.from({ length: MAX_HEADS }, (_, i) => (
+        <div key={i} className="arr-head" ref={(el) => { heads.current[i] = el; }} style={{ display: 'none' }} />
+      ))}
       <div className="arr-row">
         <span className="arr-name">Energy</span>
-        <div className="arr-cells" style={{ gridTemplateColumns: cols }}>
+        <div className="arr-cells" ref={energy} style={{ gridTemplateColumns: cols }}>
           {plan.sections.map((s) => (
             <div key={s.index} className="arr-energy" title={`${s.label}: energy ${s.energy.toFixed(2)}${s.rise ? ', builds up' : ''}`}>
               <i style={{ height: `${Math.round(s.energy * 100)}%` }} />

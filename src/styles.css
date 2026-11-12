@@ -228,7 +228,11 @@ details[open] { display: grid; gap: 7px; }
 .music-sum .chords { color: var(--text); word-break: break-word; }
 .ctl .seg { min-width: 0; }
 
-.arr { display: grid; gap: 2px; padding: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+.arr { position: relative; display: grid; gap: 2px; padding: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+.arr-head {
+  position: absolute; z-index: 1; top: 3px; bottom: 3px; left: -2px; width: 2px; /* -2px: the border, then centring */
+  background: var(--warn); border-radius: 1px; box-shadow: 0 0 6px rgba(246, 173, 85, 0.7); pointer-events: none;
+}
 .arr-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 6px; align-items: center; }
 .arr-name { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .arr-name.off { text-decoration: line-through; opacity: 0.6; }

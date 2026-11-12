@@ -278,9 +278,31 @@ export interface PlayOptions {
   playbackRate?: number;
 }
 
+/** Where in its sound each player starts and how fast it runs, to tell where it is now. */
+const plays = new WeakMap<AudioBufferSourceNode, { offset: number; rate: number; loop: boolean }>();
+
+/**
+ * Where the chain's sound is playing (seconds into the sound), as heard now: a distant source is
+ * heard a moment after it plays, by its propagation delay. One entry per sounding play.
+ */
+export function playPositions(ch: Chain, now: number) {
+  const heard = now - ch.delay.delayTime.value;
+  const dur = ch.buffer.duration;
+  const out: number[] = [];
+  for (const [p, when] of ch.players) {
+    const info = plays.get(p);
+    if (!info || when > heard) continue;
+    let t = info.offset + (heard - when) * info.rate;
+    if (info.loop) t %= dur;
+    if (t < dur) out.push(t);
+  }
+  return out;
+}
+
 /** Play the chain's sound at context time `when`. */
 export function startPlayer(ctx: BaseAudioContext, ch: Chain, when: number, { offset = 0, loop = false, gain = 1, playbackRate = 1 }: PlayOptions = {}) {
   const p = new AudioBufferSourceNode(ctx, { buffer: ch.buffer, loop, playbackRate });
+  plays.set(p, { offset, rate: playbackRate, loop });
   // The chain's gain is driven by distance and mute every frame, so a play's own level needs its own node.
   const level = gain !== 1 ? new GainNode(ctx, { gain }) : null;
   if (level) p.connect(level).connect(ch.gain);
