@@ -1,0 +1,344 @@
+// The spatial signal chain, shared by the realtime engine and the offline WAV renderer.
+//
+// Per source:
+//   player → gain → delay (propagation / Doppler) → air (low-pass) → elevation EQ → panner (HRTF + distance + cone) → master
+//             │                                       └→ send → convolver (room) → reverbReturn → master
+//             └→ reflDelay → reflAir → reflPanner → reflGain → master      (floor reflection: mirrored image source)
+//
+// Everything that changes over time is computed by `computeState` as a pure function of scene time,
+// then pushed into AudioParams: smoothed per animation frame in realtime, or as dense linear ramps offline.
+import { motionGain, positionAt, velocityAt } from '../scene/motion';
+import type { Physics, Scene, Source, Vec3 } from '../scene/types';
+import { getImpulse } from './reverb';
+import { clamp, dbToGain, DEG } from './util';
+
+/** Longest propagation delay we can model (seconds). 10 s ≈ 3.4 km in air. */
+export const MAX_DELAY = 10;
+
+export interface SourceState {
+  /** Where the sound is heard from: the "retarded" position, where the source was when it emitted it. */
+  heard: Vec3;
+  /** Where the source actually is right now. */
+  now: Vec3;
+  distance: number;
+  delay: number;
+  gain: number;
+  distanceGain: number;
+  cutoff: number;
+  send: number;
+  orient: Vec3 | null;
+  /** Elevation angle of the heard position, degrees (+ = above ear level). */
+  elevation: number;
+  eq: ElevationEq;
+  refl: { pos: Vec3; delay: number; gain: number; cutoff: number };
+}
+
+export interface ElevationEq {
+  notchF: number;
+  notchGain: number;
+  peakGain: number;
+  shelfGain: number;
+}
+
+export interface Output {
+  master: GainNode;
+  limiter: DynamicsCompressorNode;
+  reverbReturn: GainNode;
+  convolver: ConvolverNode | null;
+  envKey: string | null;
+}
+
+export interface Chain {
+  srcId: string;
+  key: string;
+  player: AudioBufferSourceNode;
+  gain: GainNode;
+  delay: DelayNode;
+  air: BiquadFilterNode;
+  notch: BiquadFilterNode;
+  peak: BiquadFilterNode;
+  shelf: BiquadFilterNode;
+  panner: PannerNode;
+  send: GainNode;
+  reflDelay: DelayNode;
+  reflAir: BiquadFilterNode;
+  reflPanner: PannerNode;
+  reflGain: GainNode;
+  analyser?: AnalyserNode;
+  abuf?: Float32Array<ArrayBuffer>;
+}
+
+const len3 = (p: Vec3) => Math.hypot(p.x, p.y, p.z);
+
+/** Same formulas the PannerNode uses, so readouts match what you hear. */
+export function distanceGain(d: number, ph: Physics) {
+  const ref = Math.max(0.001, ph.refDistance);
+  const r = ph.rolloff;
+  switch (ph.distanceModel) {
+    case 'linear': {
+      const max = Math.max(ref + 0.001, ph.maxDistance);
+      const dd = clamp(d, ref, max);
+      return clamp(1 - (Math.min(r, 1) * (dd - ref)) / (max - ref), 0, 1);
+    }
+    case 'exponential':
+      return Math.pow(Math.max(d, ref) / ref, -r);
+    default:
+      return ref / (ref + r * (Math.max(d, ref) - ref));
+  }
+}
+
+/** Air absorbs high frequencies over distance; modelled as a falling low-pass cutoff. */
+export function airCutoff(d: number, ph: Physics) {
+  if (!ph.air) return 20000;
+  return clamp(20000 / (1 + (d * ph.airAmount) / 20), 300, 20000);
+}
+
+/**
+ * Spectral elevation cues layered over the generic HRTF:
+ *  - the pinna notch moves up in frequency as the source rises (~5.7 kHz at −45°, ~11 kHz at +45°),
+ *  - a boost around 8 kHz reads as "above" (Blauert's directional bands),
+ *  - torso shadowing dulls sources below.
+ * Depth grows with |elevation| so sources at ear level are not coloured.
+ */
+export function elevationEq(elevDeg: number, ph: Physics): ElevationEq {
+  if (!ph.elevationCues) return { notchF: 8000, notchGain: 0, peakGain: 0, shelfGain: 0 };
+  const e = clamp(elevDeg, -90, 90);
+  const k = ph.elevAmount;
+  const s = Math.sin(e * DEG);
+  const depth = Math.min(1, Math.abs(e) / 20) * (e > 60 ? (90 - e) / 30 : 1);
+  return {
+    notchF: clamp(8000 * Math.pow(2, e / 90), 5000, 13000),
+    notchGain: -14 * k * depth,
+    peakGain: 7 * k * Math.max(0, s),
+    shelfGain: -9 * k * Math.max(0, -s),
+  };
+}
+
+export const listenerYaw =(scene: Scene, t: number) => scene.listener.yaw + scene.listener.spin * t;
+
+export const anySolo = (scene: Scene) => scene.sources.some((s) => s.solo && !s.muted);
+
+export function computeState(src: Source, scene: Scene, t: number, solo = anySolo(scene)): SourceState {
+  const ph = scene.physics;
+  const c = Math.max(1, ph.speedOfSound);
+  const now = positionAt(src, t);
+  let heard = now;
+  let d = len3(now);
+  let delay = 0;
+  let te = t;
+  if (ph.doppler) {
+    // Solve te = t − |p(te)| / c by fixed-point iteration: the sound reaching us now
+    // left the source at te. Driving the delay line with t − te gives physical Doppler.
+    for (let i = 0; i < 4; i++) {
+      te = t - d / c;
+      heard = positionAt(src, te);
+      d = len3(heard);
+    }
+    delay = Math.min(d / c, MAX_DELAY - 0.05);
+  }
+  const dg = distanceGain(d, ph);
+  const audible = !src.muted && (!solo || src.solo);
+
+  let orient: Vec3 | null = null;
+  if (src.directional) {
+    let v: Vec3;
+    if (src.aim === 'listener') v = { x: -heard.x, y: -heard.y, z: -heard.z };
+    else if (src.aim === 'motion') v = velocityAt(src, te);
+    else v = { x: Math.sin(src.yaw * DEG), y: 0, z: -Math.cos(src.yaw * DEG) };
+    const n = len3(v);
+    orient = n > 1e-6 ? { x: v.x / n, y: v.y / n, z: v.z / n } : { x: Math.sin(src.yaw * DEG), y: 0, z: -Math.cos(src.yaw * DEG) };
+  }
+
+  // Floor reflection: mirror the heard position in the floor plane y = −earHeight.
+  const floorY = -ph.earHeight;
+  const mirror = { x: heard.x, y: 2 * floorY - heard.y, z: heard.z };
+  const dRefl = len3(mirror);
+  const reflOn = ph.floor && heard.y > floorY;
+  const refl = {
+    pos: mirror,
+    delay: clamp(ph.doppler ? dRefl / c : (dRefl - d) / c, 0, MAX_DELAY - 0.05),
+    gain: reflOn ? ph.floorAmount : 0,
+    // A floor absorbs some of the highs.
+    cutoff: Math.min(airCutoff(dRefl, ph), 9000),
+  };
+  const elevation = Math.atan2(heard.y, Math.hypot(heard.x, heard.z)) / DEG;
+
+  return {
+    heard,
+    now,
+    distance: d,
+    elevation,
+    eq: elevationEq(elevation, ph),
+    refl,
+    delay,
+    // Use the emission time, so a fade-out at the end of a pass is heard when that sound arrives.
+    gain: audible ? dbToGain(src.gainDb) * motionGain(src, te) : 0,
+    distanceGain: dg,
+    cutoff: airCutoff(d, ph),
+    // The reverberant field falls off much more slowly than the direct sound, so
+    // far-away sources sound "wetter" — the main perceptual distance cue in a room.
+    send: Math.sqrt(dg),
+    orient,
+  };
+}
+
+// ---------------------------------------------------------------- graph building
+
+export function pannerOptions(ph: Physics, src: Source): PannerOptions {
+  return {
+    panningModel: ph.panningModel,
+    distanceModel: ph.distanceModel,
+    refDistance: Math.max(0.01, ph.refDistance),
+    maxDistance: Math.max(ph.refDistance + 0.01, ph.maxDistance),
+    rolloffFactor: Math.max(0, ph.rolloff),
+    coneInnerAngle: src.directional ? src.coneInner : 360,
+    coneOuterAngle: src.directional ? src.coneOuter : 360,
+    coneOuterGain: clamp(src.coneOuterGain, 0, 1),
+  };
+}
+
+/** Update non-automatable panner settings, touching only what changed. */
+export function applyPannerProps(panner: PannerNode, ph: Physics, src: Source) {
+  const o = pannerOptions(ph, src);
+  if (panner.panningModel !== o.panningModel) panner.panningModel = o.panningModel!;
+  if (panner.distanceModel !== o.distanceModel) panner.distanceModel = o.distanceModel!;
+  if (panner.refDistance !== o.refDistance) panner.refDistance = o.refDistance!;
+  if (panner.maxDistance !== o.maxDistance) panner.maxDistance = o.maxDistance!;
+  if (panner.rolloffFactor !== o.rolloffFactor) panner.rolloffFactor = o.rolloffFactor!;
+  if (panner.coneInnerAngle !== o.coneInnerAngle) panner.coneInnerAngle = o.coneInnerAngle!;
+  if (panner.coneOuterAngle !== o.coneOuterAngle) panner.coneOuterAngle = o.coneOuterAngle!;
+  if (Math.abs(panner.coneOuterGain - o.coneOuterGain!) > 1e-6) panner.coneOuterGain = o.coneOuterGain!;
+}
+
+export function buildOutput(ctx: BaseAudioContext, scene: Scene, destination: AudioNode): Output {
+  const master = new GainNode(ctx, { gain: dbToGain(scene.masterDb) });
+  // A brick-wall-ish limiter keeps close, loud sources from clipping the mix.
+  const limiter = new DynamicsCompressorNode(ctx, { threshold: -3, knee: 0, ratio: 20, attack: 0.002, release: 0.15 });
+  master.connect(limiter).connect(destination);
+  const reverbReturn = new GainNode(ctx, { gain: scene.environment.wet });
+  reverbReturn.connect(master);
+  const out: Output = { master, limiter, reverbReturn, convolver: null, envKey: null };
+  setEnvironment(ctx, out, scene.environment.preset);
+  return out;
+}
+
+/** Swap the room impulse response. Returns true when the convolver changed. */
+export function setEnvironment(ctx: BaseAudioContext, out: Output, preset: string) {
+  if (out.envKey === preset) return false;
+  out.envKey = preset;
+  out.convolver?.disconnect();
+  const ir = getImpulse(ctx.sampleRate, preset);
+  out.convolver = ir ? new ConvolverNode(ctx, { buffer: ir }) : null;
+  out.convolver?.connect(out.reverbReturn);
+  return true;
+}
+
+export function createChain(ctx: BaseAudioContext, src: Source, buffer: AudioBuffer, out: Output, ph: Physics, key = '', withAnalyser = false): Chain {
+  const player = new AudioBufferSourceNode(ctx, { buffer, loop: src.loop });
+  const gain = new GainNode(ctx, { gain: 0 });
+  const delay = new DelayNode(ctx, { maxDelayTime: MAX_DELAY, delayTime: 0 });
+  const air = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 20000, Q: 0.707 });
+  const notch = new BiquadFilterNode(ctx, { type: 'peaking', frequency: 8000, Q: 3, gain: 0 });
+  const peak = new BiquadFilterNode(ctx, { type: 'peaking', frequency: 8000, Q: 1.4, gain: 0 });
+  const shelf = new BiquadFilterNode(ctx, { type: 'highshelf', frequency: 3500, gain: 0 });
+  const panner = new PannerNode(ctx, pannerOptions(ph, src));
+  const send = new GainNode(ctx, { gain: 0 });
+  player.connect(gain).connect(delay).connect(air).connect(notch).connect(peak).connect(shelf).connect(panner).connect(out.master);
+  air.connect(send);
+  if (out.convolver) send.connect(out.convolver);
+
+  const reflDelay = new DelayNode(ctx, { maxDelayTime: MAX_DELAY, delayTime: 0 });
+  const reflAir = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 9000, Q: 0.707 });
+  const reflPanner = new PannerNode(ctx, pannerOptions(ph, { ...src, directional: false }));
+  const reflGain = new GainNode(ctx, { gain: 0 });
+  gain.connect(reflDelay).connect(reflAir).connect(reflPanner).connect(reflGain).connect(out.master);
+
+  const chain: Chain = {
+    srcId: src.id, key, player, gain, delay, air, notch, peak, shelf, panner, send, reflDelay, reflAir, reflPanner, reflGain,
+  };
+  if (withAnalyser) {
+    chain.analyser = new AnalyserNode(ctx, { fftSize: 512 });
+    chain.abuf = new Float32Array(512);
+    gain.connect(chain.analyser);
+  }
+  return chain;
+}
+
+export type ApplyMode = 'set' | 'ramp' | 'smooth';
+
+const SETTERS: Record<ApplyMode, (p: AudioParam, v: number, t: number) => void> = {
+  set: (p, v, t) => p.setValueAtTime(v, t),
+  ramp: (p, v, t) => p.linearRampToValueAtTime(v, t),
+  smooth: (p, v, t) => p.setTargetAtTime(v, t, 0.025),
+};
+
+export function applyState(ch: Chain, st: SourceState, time: number, mode: ApplyMode) {
+  const set = SETTERS[mode];
+  set(ch.panner.positionX, st.heard.x, time);
+  set(ch.panner.positionY, st.heard.y, time);
+  set(ch.panner.positionZ, st.heard.z, time);
+  set(ch.delay.delayTime, st.delay, time);
+  set(ch.air.frequency, st.cutoff, time);
+  set(ch.send.gain, st.send, time);
+  set(ch.gain.gain, st.gain, time);
+  set(ch.notch.frequency, st.eq.notchF, time);
+  set(ch.notch.gain, st.eq.notchGain, time);
+  set(ch.peak.gain, st.eq.peakGain, time);
+  set(ch.shelf.gain, st.eq.shelfGain, time);
+  set(ch.reflPanner.positionX, st.refl.pos.x, time);
+  set(ch.reflPanner.positionY, st.refl.pos.y, time);
+  set(ch.reflPanner.positionZ, st.refl.pos.z, time);
+  set(ch.reflDelay.delayTime, st.refl.delay, time);
+  set(ch.reflAir.frequency, st.refl.cutoff, time);
+  set(ch.reflGain.gain, st.refl.gain, time);
+  if (st.orient) {
+    set(ch.panner.orientationX, st.orient.x, time);
+    set(ch.panner.orientationY, st.orient.y, time);
+    set(ch.panner.orientationZ, st.orient.z, time);
+  }
+}
+
+export function setListener(ctx: BaseAudioContext, yawDeg: number, time: number, mode: ApplyMode) {
+  const L = ctx.listener;
+  const fx = Math.sin(yawDeg * DEG);
+  const fz = -Math.cos(yawDeg * DEG);
+  if (L.forwardX) {
+    const set = SETTERS[mode];
+    set(L.forwardX, fx, time);
+    set(L.forwardY, 0, time);
+    set(L.forwardZ, fz, time);
+  } else {
+    // Firefox: no AudioParams on the listener
+    L.setOrientation(fx, 0, fz, 0, 1, 0);
+  }
+}
+
+// ---------------------------------------------------------------- offline render
+
+/**
+ * Render the scene to a stereo buffer, faster than realtime. Motion is written as
+ * 200 Hz linear automation, so Doppler and panning are sample-accurate between points.
+ */
+export async function renderScene(scene: Scene, getBuffer: (id: string | null) => AudioBuffer | undefined, duration: number, sampleRate: number) {
+  const length = Math.max(1, Math.ceil(duration * sampleRate));
+  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length, sampleRate });
+  const out = buildOutput(ctx, scene, ctx.destination);
+  const steps = Math.ceil(duration * 200);
+  const dt = duration / steps;
+
+  if (scene.listener.spin) {
+    for (let k = 0; k <= steps; k++) setListener(ctx, listenerYaw(scene, k * dt), k * dt, k ? 'ramp' : 'set');
+  } else {
+    setListener(ctx, scene.listener.yaw, 0, 'set');
+  }
+
+  const solo = anySolo(scene);
+  for (const src of scene.sources) {
+    const buffer = getBuffer(src.soundId);
+    if (!buffer || src.muted || (solo && !src.solo)) continue;
+    const ch = createChain(ctx, src, buffer, out, scene.physics);
+    for (let k = 0; k <= steps; k++) applyState(ch, computeState(src, scene, k * dt, solo), k * dt, k ? 'ramp' : 'set');
+    ch.player.start(src.startDelay);
+  }
+  return ctx.startRendering();
+}
