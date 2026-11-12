@@ -151,6 +151,15 @@ function chordAt(p: MusicParams, plan: Plan, sec: Section, beatInSec: number) {
   return { chord: prog[i % prog.length], next: prog[(i + 1) % prog.length], spanStart: i * per, spanEnd: (i + 1) * per };
 }
 
+/** The chords of a section in order, with their spans in beats from its start. */
+export function sectionChords(p: MusicParams, plan: Plan, sec: Section) {
+  const per = Math.max(0.5, p.chordBars) * p.meter;
+  const end = sec.bars * p.meter;
+  const out: { chord: Chord; start: number; end: number }[] = [];
+  for (let b = 0; b < end - 1e-6; b += per) out.push({ chord: chordAt(p, plan, sec, b).chord, start: b, end: Math.min(end, b + per) });
+  return out;
+}
+
 // ---------------------------------------------------------------- labels
 
 export const ALGOS: Record<PitchAlgo, string> = {

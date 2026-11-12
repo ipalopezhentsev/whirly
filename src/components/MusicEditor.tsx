@@ -15,6 +15,7 @@ import { chordName, NOTE_NAMES, PROGRESSIONS, SCALES } from '../audio/music/theo
 import { barSeconds, MAX_SECONDS, musicDuration, type MusicParams, type Role, type TrackParams } from '../audio/music/types';
 import { fmtTime } from '../audio/util';
 import { Check, Hint, Select, Seg, Slider } from './controls';
+import { PianoRoll } from './PianoRoll';
 import type { Sound } from '../scene/types';
 
 const STYLE_OPTIONS = Object.entries(STYLES).map(([k, s]) => [k, s.label] as const);
@@ -231,6 +232,11 @@ function ArrangementMap({ p, seed, plan, live }: {
   const root = useRef<HTMLDivElement>(null);
   const energy = useRef<HTMLDivElement>(null);
   const heads = useRef<(HTMLDivElement | null)[]>([]);
+  // The cell (part × section) open in the piano roll.
+  const [sel, setSel] = useState<{ track: string; sec: number } | null>(null);
+  const selTrack = sel && p.tracks.find((t) => t.id === sel.track);
+  const selSec = sel ? Math.min(sel.sec, plan.sections.length - 1) : -1;
+  const pick = (track: string, sec: number) => setSel(sel?.track === track && selSec === sec ? null : { track, sec });
 
   useFrame(() => {
     // Stems of one piece play in step: show a single line for plays within 50 ms of each other.
@@ -255,7 +261,9 @@ function ArrangementMap({ p, seed, plan, live }: {
   });
 
   return (
-    <div className="arr" ref={root} title="Arrangement: sections across, parts down. Brighter = plays more (denser, louder, more drum voices).">
+    <>
+    <div className="arr" ref={root}
+      title="Arrangement: sections across, parts down. Brighter = plays more (denser, louder, more drum voices). Click a cell to see its notes.">
       {Array.from({ length: MAX_HEADS }, (_, i) => (
         <div key={i} className="arr-head" ref={(el) => { heads.current[i] = el; }} style={{ display: 'none' }} />
       ))}
@@ -276,12 +284,23 @@ function ArrangementMap({ p, seed, plan, live }: {
           <div className="arr-cells" style={{ gridTemplateColumns: cols }}>
             {plan.sections.map((s) => {
               const lv = trackLevel(p, s, tr, seed);
-              return <div key={s.index} className="arr-cell" style={{ opacity: lv ? 0.25 + 0.75 * lv : 1, background: lv ? undefined : 'transparent' }} />;
+              const on = sel?.track === tr.id && selSec === s.index;
+              return (
+                <div key={s.index} className={`arr-cell ${on ? 'sel' : ''}`} onClick={() => pick(tr.id, s.index)}
+                  title={`${tr.name}, ${s.label}: click for the piano roll`}>
+                  <i style={{ opacity: lv ? 0.25 + 0.75 * lv : 0 }} />
+                </div>
+              );
             })}
           </div>
         </div>
       ))}
     </div>
+    {selTrack && selSec >= 0 && (
+      <PianoRoll p={p} plan={plan} seed={seed} tr={selTrack} sec={selSec} live={live}
+        onSection={(i) => setSel({ track: selTrack.id, sec: i })} onClose={() => setSel(null)} />
+    )}
+    </>
   );
 }
 

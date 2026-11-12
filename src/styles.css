@@ -237,7 +237,23 @@ details[open] { display: grid; gap: 7px; }
 .arr-name { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .arr-name.off { text-decoration: line-through; opacity: 0.6; }
 .arr-cells { display: grid; gap: 2px; }
-.arr-cell { height: 9px; border-radius: 2px; background: var(--accent); }
+.arr-cell { position: relative; height: 9px; border-radius: 2px; cursor: pointer; }
+.arr-cell i { position: absolute; inset: 0; border-radius: 2px; background: var(--accent); }
+.arr-cell:hover { outline: 1px solid var(--line-2); }
+.arr-cell.sel { outline: 1px solid var(--text); outline-offset: 1px; }
+
+.roll { display: grid; gap: 4px; padding: 4px 6px 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+.roll-head { display: flex; align-items: center; gap: 4px; }
+.roll-head button.icon { padding: 1px 6px; min-width: 22px; }
+.roll-title { flex: 1; min-width: 0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.roll-title .muted { color: var(--muted); }
+.roll-body { position: relative; }
+.roll-body canvas { display: block; border-radius: 3px; }
+.roll-playhead {
+  position: absolute; z-index: 1; top: 0; bottom: 0; left: -1px; width: 2px;
+  background: var(--warn); border-radius: 1px; box-shadow: 0 0 6px rgba(246, 173, 85, 0.7); pointer-events: none;
+}
+.roll-empty { position: absolute; inset: 14px 0 0 0; display: grid; place-items: center; font-size: 11px; color: var(--muted); pointer-events: none; }
 .arr-energy { position: relative; height: 22px; border-radius: 2px; background: var(--card); overflow: hidden; }
 .arr-energy i { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(167, 139, 250, 0.45); }
 .arr-energy b { position: absolute; left: 3px; top: 1px; font-size: 9px; font-weight: 600; color: var(--text); }
