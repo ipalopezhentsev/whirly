@@ -237,10 +237,21 @@ function ArrangementMap({ p, seed, plan, live }: {
   const selTrack = sel && p.tracks.find((t) => t.id === sel.track);
   const selSec = sel ? Math.min(sel.sec, plan.sections.length - 1) : -1;
   const pick = (track: string, sec: number) => setSel(sel?.track === track && selSec === sec ? null : { track, sec });
+  /** Sections a playhead was in on the last frame. */
+  const playingSecs = useRef<number[]>([]);
 
   useFrame(() => {
     // Stems of one piece play in step: show a single line for plays within 50 ms of each other.
     const times = (live ? engine.playheads(live.soundIds) : []).sort((a, b) => a - b).filter((t, i, all) => !i || t - all[i - 1] > 0.05);
+    const secs = live ? times.map((t) => plan.sections.findIndex((s) => t / live.barSec < s.start + s.bars)).filter((k) => k >= 0) : [];
+    // The piano roll follows playback: when the playhead leaves the section shown, show the one it entered
+    // (the next in playing order, wrapping round when the piece loops).
+    if (sel && playingSecs.current.includes(selSec) && !secs.includes(selSec) && secs.length) {
+      const n = plan.sections.length;
+      const next = secs.reduce((a, k) => ((k - selSec + n) % n < (a - selSec + n) % n ? k : a));
+      setSel({ track: sel.track, sec: next });
+    }
+    playingSecs.current = secs;
     const box = root.current?.getBoundingClientRect();
     heads.current.forEach((h, i) => {
       if (!h) return;
